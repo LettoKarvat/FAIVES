@@ -1,6 +1,5 @@
 // src/routes.jsx
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -10,15 +9,14 @@ import Appointments from './pages/Appointments';
 import Calendar from './pages/Calendar';
 import Clients from './pages/Clients';
 import Colaboradores from './pages/Colaboradores';
-
 //import Accesses from './pages/Accesses';
-
-// Importa página de detalhes do cliente
 import ClientDetail from './pages/ClientDetail';
+import ProjectDetail from "./components/ProjectDetail";
 
 const PrivateRoute = ({ children }) => {
-  const { user } = useAuth();
-  return user ? children : <Navigate to="/login" />;
+  // Verifica se o token de autenticação existe no localStorage
+  const token = localStorage.getItem('token');
+  return token ? children : <Navigate to="/login" />;
 };
 
 const AppRoutes = () => {
@@ -40,10 +38,9 @@ const AppRoutes = () => {
         <Route path="calendar" element={<Calendar />} />
         <Route path="clients" element={<Clients />} />
         <Route path="colaboradores" element={<Colaboradores />} />
-        {/*   <Route path="accesses" element={<Accesses />} />*/}
-
-        {/* Rota dinâmica /clients/:id */}
+        {/* <Route path="accesses" element={<Accesses />} /> */}
         <Route path="clients/:id" element={<ClientDetail />} />
+        <Route path="/projects/:id" element={<ProjectDetail />} />
       </Route>
     </Routes>
   );

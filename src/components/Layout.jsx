@@ -1,6 +1,4 @@
-// src/components/Layout.jsx
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import {
   AppBar,
@@ -24,36 +22,57 @@ import {
   Event as AppointmentsIcon,
   CalendarMonth as CalendarIcon,
   Logout as LogoutIcon,
-  People as PeopleIcon,
-  Lock as LockIcon,
+  People as PeopleIcon
 } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
 
 const drawerWidth = 240;
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  // 1. Ler do localStorage o objeto 'user'
+  const storedUser = localStorage.getItem('user');
+  const userObject = storedUser ? JSON.parse(storedUser) : {};
+
+  // 2. Pegar nome e role
+  const userName = userObject.name || 'Usuário';
+  const userRole = userObject.role || '';
+
+  // 3. Redirecionar se não for admin (vai para /tasks)
+  useEffect(() => {
+    if (userRole !== 'admin') {
+      navigate('/tasks');
+    }
+  }, [userRole, navigate]);
+
+  // 4. Definir menu, marcando itens que só admin pode ver
   const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/', adminOnly: true },
     { text: 'Projetos', icon: <ProjectsIcon />, path: '/projects' },
     { text: 'Tarefas', icon: <TasksIcon />, path: '/tasks' },
     { text: 'Compromissos', icon: <AppointmentsIcon />, path: '/appointments' },
     { text: 'Calendário', icon: <CalendarIcon />, path: '/calendar' },
     { text: 'Clientes', icon: <PeopleIcon />, path: '/clients' },
-    // { text: 'Acessos', icon: <LockIcon />, path: '/accesses' },
-    { text: 'Colaboradores', icon: <PeopleIcon />, path: '/colaboradores' },
+    { text: 'Colaboradores', icon: <PeopleIcon />, path: '/colaboradores', adminOnly: true },
   ];
 
+  // 5. Filtrar menu para esconder itens adminOnly caso não seja admin
+  const filteredMenuItems = menuItems.filter((item) => {
+    if (item.adminOnly && userRole !== 'admin') {
+      return false;
+    }
+    return true;
+  });
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
   const handleLogout = () => {
-    logout();
+    // Remove as infos do localStorage
+    localStorage.removeItem('token');
+    localStorage.removeItem('user'); // importante remover o objeto inteiro
     navigate('/login');
   };
 
@@ -61,7 +80,7 @@ export default function Layout() {
     <div>
       <Toolbar />
       <List>
-        {menuItems.map((item) => (
+        {filteredMenuItems.map((item) => (
           <ListItem
             button
             key={item.text}
@@ -99,13 +118,19 @@ export default function Layout() {
             Sistema de Gestão
           </Typography>
           <Typography variant="subtitle1" sx={{ mr: 2 }}>
-            {user?.name}
+            {userName}
           </Typography>
-          <Button color="inherit" onClick={handleLogout} startIcon={<LogoutIcon />}>
+          <Button
+            color="inherit"
+            onClick={handleLogout}
+            startIcon={<LogoutIcon />}
+          >
             Sair
           </Button>
         </Toolbar>
       </AppBar>
+
+      {/* Menu lateral */}
       <Box
         component="nav"
         sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
@@ -115,9 +140,7 @@ export default function Layout() {
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true,
-          }}
+          ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: 'block', sm: 'none' },
             '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
@@ -137,6 +160,8 @@ export default function Layout() {
           {drawer}
         </Drawer>
       </Box>
+
+      {/* Conteúdo principal */}
       <Box
         component="main"
         sx={{

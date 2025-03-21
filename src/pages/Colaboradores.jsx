@@ -1,5 +1,4 @@
-// src/pages/Colaboradores.jsx
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Box,
     Grid,
@@ -13,59 +12,190 @@ import {
     DialogActions,
     TextField,
     Chip,
-    Divider,
+    MenuItem,
+    CircularProgress,
+    Alert
 } from '@mui/material';
+import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs from 'dayjs';
+import api from '../services/api';
 
-// Mock de usuários (colaboradores), tarefas e compromissos
-import { mockUsers } from '../mocks/users';
-import { mockTasks } from '../mocks/tasks';
-import { mockAppointments } from '../mocks/appointments';
+// Função para obter o usuário atual (p.ex.: do localStorage)
+const getCurrentUser = () => {
+    const userStr = localStorage.getItem('user');
+    return userStr ? JSON.parse(userStr) : null;
+};
 
 export default function Colaboradores() {
-    // Estado para usuários (colaboradores)
-    const [users, setUsers] = useState(mockUsers);
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-    // Estado do Dialog de criação
-    const [open, setOpen] = useState(false);
+    // Usuário logado
+    const [currentUser, setCurrentUser] = useState(null);
 
-    // Campos para novo colaborador
-    const [newUsername, setNewUsername] = useState('');
-    const [newPassword, setNewPassword] = useState('');
-    const [newRole, setNewRole] = useState('');
+    // Estados para o diálogo de criar/editar usuário
+    const [openDialog, setOpenDialog] = useState(false);
     const [newName, setNewName] = useState('');
+    const [newEmail, setNewEmail] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [newRole, setNewRole] = useState('colaborador'); // padrão: colaborador
+    const [newContact, setNewContact] = useState('');
+    const [newEspecialidade, setNewEspecialidade] = useState(''); // corresponde a 'position'
+    const [newAdmissionDate, setNewAdmissionDate] = useState(''); // YYYY-MM-DD
 
-    // Funções de abrir/fechar dialog
-    const handleOpen = () => setOpen(true);
-    const handleClose = () => setOpen(false);
+    // Estado para identificar se está editando (contém o usuário a ser editado)
+    const [editingUser, setEditingUser] = useState(null);
 
-    // Salvar novo colaborador (mock)
-    const handleSave = () => {
-        const newId = users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 1;
+    // --------------------------------------------------
+    // useEffect: carrega usuário logado e lista de colaboradores
+    useEffect(() => {
+        const user = getCurrentUser();
+        setCurrentUser(user);
+        fetchUsersFromBackend();
+    }, []);
 
-        const newUser = {
-            id: newId,
-            username: newUsername,
-            password: newPassword,
-            role: newRole,
-            name: newName
-        };
-
-        setUsers([...users, newUser]);
-
-        // limpa campos e fecha
-        setNewUsername('');
-        setNewPassword('');
-        setNewRole('');
-        setNewName('');
-        handleClose();
+    // Carrega lista de usuários do backend (GET /auth/users/list)
+    const fetchUsersFromBackend = async () => {
+        try {
+            setLoading(true);
+            const token = localStorage.getItem('token');
+            const response = await api.get('/auth/users/list', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUsers(response.data);
+        } catch (err) {
+            console.error('Erro ao buscar usuários:', err);
+            setError('Não foi possível carregar os colaboradores.');
+        } finally {
+            setLoading(false);
+        }
     };
 
-    // Para cada colaborador, pegamos as tarefas e compromissos associados
-    const getTasksForUser = (userId) =>
-        mockTasks.filter((t) => t.assignedToUserId === userId);
+    // --------------------------------------------------
+    // Abrir/Fechar diálogo
 
-    const getAppointmentsForUser = (userId) =>
-        mockAppointments.filter((a) => a.createdByUserId === userId);
+    // Abre o diálogo para criar novo usuário
+    const handleOpenDialog = () => {
+        setEditingUser(null);
+        setNewName('');
+        setNewEmail('');
+        setNewPassword('');
+        setNewRole('colaborador');
+        setNewContact('');
+        setNewEspecialidade('');
+        setNewAdmissionDate('');
+        setOpenDialog(true);
+    };
+
+    // Abre o diálogo para editar um usuário existente
+    const handleOpenEditDialog = (user) => {
+        setEditingUser(user);
+        setNewName(user.name);
+        setNewEmail(user.email);
+        setNewPassword('');
+        setNewRole(user.role);
+        setNewContact(user.contact || '');
+        setNewEspecialidade(user.position || '');
+        setNewAdmissionDate(user.admission_date || '');
+        setOpenDialog(true);
+    };
+
+    const handleCloseDialog = () => {
+        setOpenDialog(false);
+    };
+
+    // --------------------------------------------------
+    // Função para criar novo usuário ou editar usuário (admin)
+    const handleSaveUser = async () => {
+        if (!currentUser || currentUser.role !== 'admin') {
+            alert('Apenas administradores podem criar ou editar usuários.');
+            return;
+        }
+        if (!newName || !newEmail) {
+            alert('Nome e e-mail são obrigatórios.');
+            return;
+        }
+        const token = localStorage.getItem('token');
+        try {
+            if (editingUser) {
+                // Edição: chama PATCH /auth/users/<id>
+                const payload = {
+                    name: newName,
+                    email: newEmail,
+                    role: newRole,
+                    contact: newContact,
+                    position: newEspecialidade,
+                    admission_date: newAdmissionDate
+                };
+                // Se a senha for informada, inclui no payload para atualizar
+                if (newPassword) {
+                    payload.password = newPassword;
+                }
+                await api.patch(`/auth/users/${editingUser.id}`, payload, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                alert('Usuário atualizado com sucesso!');
+            } else {
+                // Criação: chama POST /auth/users
+                if (!newPassword) {
+                    alert('Senha é obrigatória para criação de usuário.');
+                    return;
+                }
+                const payload = {
+                    name: newName,
+                    email: newEmail,
+                    password: newPassword,
+                    role: newRole,
+                    contact: newContact,
+                    position: newEspecialidade,
+                    admission_date: newAdmissionDate
+                };
+                await api.post('/auth/users', payload, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                alert('Usuário criado com sucesso!');
+            }
+            handleCloseDialog();
+            fetchUsersFromBackend();
+        } catch (err) {
+            console.error('Erro ao salvar usuário:', err);
+            alert('Não foi possível salvar o usuário. Verifique os dados e tente novamente.');
+        }
+    };
+
+    // --------------------------------------------------
+    // Função para excluir um usuário
+    const handleDeleteUser = async (user) => {
+        if (!window.confirm(`Tem certeza que deseja excluir o usuário ${user.name}?`)) {
+            return;
+        }
+        try {
+            const token = localStorage.getItem('token');
+            await api.delete(`/auth/users/${user.id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            alert('Usuário excluído com sucesso!');
+            fetchUsersFromBackend();
+        } catch (err) {
+            console.error('Erro ao excluir usuário:', err);
+            alert('Não foi possível excluir o usuário.');
+        }
+    };
+
+    // --------------------------------------------------
+    // Render
+    if (loading) {
+        return (
+            <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+    if (error) {
+        return <Alert severity="error">{error}</Alert>;
+    }
 
     return (
         <Box>
@@ -73,116 +203,153 @@ export default function Colaboradores() {
                 Colaboradores
             </Typography>
 
-            {/* Botão para adicionar novo colaborador */}
-            <Button variant="contained" sx={{ mb: 2 }} onClick={handleOpen}>
-                Novo Colaborador
-            </Button>
+            {/* Botão para criar novo usuário (visível somente para admin) */}
+            {currentUser?.role === 'admin' && (
+                <Button variant="contained" sx={{ mb: 2 }} onClick={handleOpenDialog}>
+                    Novo Colaborador
+                </Button>
+            )}
 
             <Grid container spacing={2}>
-                {users.map((user) => {
-                    const userTasks = getTasksForUser(user.id);
-                    const userAppointments = getAppointmentsForUser(user.id);
-
-                    return (
-                        <Grid
-                            item
-                            key={user.id}
-                            xs={12}
-                            sm={12}
-                            md={6}
-                            lg={4}
-                        >
-                            <Card>
-                                <CardContent>
-                                    <Typography variant="h6">
-                                        {user.name}
+                {users.map((user) => (
+                    <Grid item key={user.id} xs={12} sm={6} md={4}>
+                        <Card>
+                            <CardContent>
+                                <Typography variant="h6">{user.name}</Typography>
+                                <Typography variant="body2" color="textSecondary">
+                                    E-mail: {user.email}
+                                </Typography>
+                                <Chip
+                                    label={user.role}
+                                    variant="outlined"
+                                    color={
+                                        user.role === 'admin'
+                                            ? 'error'
+                                            : user.role === 'colaborador'
+                                                ? 'primary'
+                                                : 'default'
+                                    }
+                                    sx={{ mt: 1 }}
+                                />
+                                {user.contact && (
+                                    <Typography variant="body2" sx={{ mt: 1 }}>
+                                        Contato: {user.contact}
                                     </Typography>
-                                    <Typography variant="body2" color="textSecondary">
-                                        Usuário: {user.username}
+                                )}
+                                {user.position && (
+                                    <Typography variant="body2">
+                                        Especialidade: {user.position}
                                     </Typography>
-                                    <Chip
-                                        label={user.role}
-                                        variant="outlined"
-                                        color={
-                                            user.role === 'admin' ? 'error' : 'primary'
-                                        }
-                                        sx={{ mt: 1 }}
-                                    />
+                                )}
+                                {user.admission_date && (
+                                    <Typography variant="body2">
+                                        Admissão: {user.admission_date}
+                                    </Typography>
+                                )}
 
-                                    <Divider sx={{ my: 2 }} />
-
-                                    <Typography variant="subtitle1">Tarefas Associadas:</Typography>
-                                    {userTasks.length === 0 ? (
-                                        <Typography variant="body2" color="textSecondary">
-                                            Nenhuma tarefa
-                                        </Typography>
-                                    ) : (
-                                        userTasks.map((task) => (
-                                            <Typography variant="body2" key={task.id}>
-                                                • {task.title} ({task.status})
-                                            </Typography>
-                                        ))
-                                    )}
-
-                                    <Divider sx={{ my: 2 }} />
-
-                                    <Typography variant="subtitle1">Compromissos Associados:</Typography>
-                                    {userAppointments.length === 0 ? (
-                                        <Typography variant="body2" color="textSecondary">
-                                            Nenhum compromisso
-                                        </Typography>
-                                    ) : (
-                                        userAppointments.map((app) => (
-                                            <Typography variant="body2" key={app.id}>
-                                                • {app.description} ({new Date(app.dateTime).toLocaleString()})
-                                            </Typography>
-                                        ))
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                    );
-                })}
+                                {/* Botões de ação: Editar e Excluir (somente para admin) */}
+                                {currentUser?.role === 'admin' && (
+                                    <>
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            sx={{ mt: 1, mr: 1 }}
+                                            onClick={() => handleOpenEditDialog(user)}
+                                        >
+                                            Editar
+                                        </Button>
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            color="error"
+                                            sx={{ mt: 1 }}
+                                            onClick={() => handleDeleteUser(user)}
+                                        >
+                                            Excluir
+                                        </Button>
+                                    </>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                ))}
             </Grid>
 
-            {/* Dialog: Criar Novo Colaborador */}
-            <Dialog open={open} onClose={handleClose}>
-                <DialogTitle>Novo Colaborador</DialogTitle>
-                <DialogContent
-                    sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 2,
-                        mt: 1,
-                        width: { xs: '250px', sm: '350px' }
-                    }}
-                >
+            {/* Diálogo para criar/editar usuário */}
+            <Dialog open={openDialog} onClose={handleCloseDialog} fullWidth maxWidth="sm">
+                <DialogTitle>
+                    {editingUser ? 'Editar Colaborador' : 'Novo Colaborador'}
+                </DialogTitle>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
                     <TextField
                         label="Nome Completo"
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
+                        fullWidth
                     />
                     <TextField
-                        label="Usuário"
-                        value={newUsername}
-                        onChange={(e) => setNewUsername(e.target.value)}
+                        label="E-mail"
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        fullWidth
                     />
                     <TextField
-                        label="Senha"
+                        label={
+                            editingUser
+                                ? 'Nova Senha (deixe em branco para manter a atual)'
+                                : 'Senha'
+                        }
                         type="password"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
+                        fullWidth
                     />
                     <TextField
-                        label="Papel (role)"
+                        select
+                        label="Papel (Role)"
                         value={newRole}
                         onChange={(e) => setNewRole(e.target.value)}
-                        helperText="Ex: admin, func, etc."
+                        fullWidth
+                    >
+                        <MenuItem value="admin">Administrador</MenuItem>
+                        <MenuItem value="colaborador">Colaborador</MenuItem>
+                        <MenuItem value="convidado">Convidado</MenuItem>
+                    </TextField>
+                    <TextField
+                        label="Contato (Telefone)"
+                        value={newContact}
+                        onChange={(e) => setNewContact(e.target.value)}
+                        fullWidth
+                        placeholder="Ex.: (11) 99999-8888"
                     />
+                    <TextField
+                        label="Especialidade"
+                        value={newEspecialidade}
+                        onChange={(e) => setNewEspecialidade(e.target.value)}
+                        fullWidth
+                        placeholder="Ex.: Suporte N1, Analista, etc."
+                    />
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <DatePicker
+                            label="Data de Admissão"
+                            format="DD/MM/YYYY"
+                            value={newAdmissionDate ? dayjs(newAdmissionDate) : null}
+                            onChange={(newValue) => {
+                                if (!newValue) {
+                                    setNewAdmissionDate('');
+                                } else {
+                                    const formatted = dayjs(newValue).format('YYYY-MM-DD');
+                                    setNewAdmissionDate(formatted);
+                                }
+                            }}
+                            slotProps={{ textField: { fullWidth: true } }}
+                        />
+                    </LocalizationProvider>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleClose}>Cancelar</Button>
-                    <Button variant="contained" onClick={handleSave}>
+                    <Button onClick={handleCloseDialog}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleSaveUser}>
                         Salvar
                     </Button>
                 </DialogActions>

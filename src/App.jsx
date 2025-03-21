@@ -1,11 +1,9 @@
-// src/App.jsx
 import { BrowserRouter as Router } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ptBR } from 'date-fns/locale';
-import { AuthProvider } from './contexts/AuthContext';
 import AppRoutes from './routes';
 
 const theme = createTheme({
@@ -18,7 +16,6 @@ const theme = createTheme({
       main: '#dc004e',
     },
     background: {
-      // Você pode customizar a cor de fundo se quiser
       default: '#121212',
       paper: '#1e1e1e',
     },
@@ -33,11 +30,9 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ptBR}>
-        <AuthProvider>
-          <Router>
-            <AppRoutes />
-          </Router>
-        </AuthProvider>
+        <Router>
+          <AppRoutes />
+        </Router>
       </LocalizationProvider>
     </ThemeProvider>
   );
