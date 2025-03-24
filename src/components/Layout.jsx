@@ -16,13 +16,11 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon,
-  Dashboard as DashboardIcon,
   Assignment as ProjectsIcon,
   Task as TasksIcon,
   Event as AppointmentsIcon,
-  CalendarMonth as CalendarIcon,
   Logout as LogoutIcon,
-  People as PeopleIcon
+  People as PeopleIcon,
 } from '@mui/icons-material';
 
 const drawerWidth = 240;
@@ -46,14 +44,13 @@ export default function Layout() {
     }
   }, [userRole, navigate]);
 
-  // 4. Definir menu, marcando itens que só admin pode ver
+  // 4. Definir menu, sem 'Dashboard' nem 'Calendário'
   const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/', adminOnly: true },
     { text: 'Projetos', icon: <ProjectsIcon />, path: '/projects' },
     { text: 'Tarefas', icon: <TasksIcon />, path: '/tasks' },
     { text: 'Compromissos', icon: <AppointmentsIcon />, path: '/appointments' },
-    { text: 'Calendário', icon: <CalendarIcon />, path: '/calendar' },
     { text: 'Clientes', icon: <PeopleIcon />, path: '/clients' },
+    // Somente admin pode ver
     { text: 'Colaboradores', icon: <PeopleIcon />, path: '/colaboradores', adminOnly: true },
   ];
 

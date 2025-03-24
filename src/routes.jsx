@@ -2,14 +2,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
 import Tasks from './pages/Tasks';
 import Appointments from './pages/Appointments';
-import Calendar from './pages/Calendar';
 import Clients from './pages/Clients';
 import Colaboradores from './pages/Colaboradores';
-//import Accesses from './pages/Accesses';
 import ClientDetail from './pages/ClientDetail';
 import ProjectDetail from "./components/ProjectDetail";
 
@@ -23,6 +20,7 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+
       <Route
         path="/"
         element={
@@ -31,16 +29,20 @@ const AppRoutes = () => {
           </PrivateRoute>
         }
       >
-        <Route index element={<Dashboard />} />
+        {/*
+          Aqui definimos o "index" para que, ao acessar "/",
+          redirecione para "/projects".
+        */}
+        <Route index element={<Navigate to="/projects" />} />
+
+        {/* Demais rotas privadas (dentro de Layout) */}
         <Route path="projects" element={<Projects />} />
         <Route path="tasks" element={<Tasks />} />
         <Route path="appointments" element={<Appointments />} />
-        <Route path="calendar" element={<Calendar />} />
         <Route path="clients" element={<Clients />} />
         <Route path="colaboradores" element={<Colaboradores />} />
-        {/* <Route path="accesses" element={<Accesses />} /> */}
         <Route path="clients/:id" element={<ClientDetail />} />
-        <Route path="/projects/:id" element={<ProjectDetail />} />
+        <Route path="projects/:id" element={<ProjectDetail />} />
       </Route>
     </Routes>
   );

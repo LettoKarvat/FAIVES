@@ -18,10 +18,11 @@ import {
 } from '@mui/material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import InputMask from 'react-input-mask'; // <--- Importante
 import dayjs from 'dayjs';
 import api from '../services/api';
 
-// Função para obter o usuário atual (p.ex.: do localStorage)
+// Função para obter o usuário atual
 const getCurrentUser = () => {
     const userStr = localStorage.getItem('user');
     return userStr ? JSON.parse(userStr) : null;
@@ -42,27 +43,24 @@ export default function Colaboradores() {
     const [newPassword, setNewPassword] = useState('');
     const [newRole, setNewRole] = useState('colaborador'); // padrão: colaborador
     const [newContact, setNewContact] = useState('');
-    const [newEspecialidade, setNewEspecialidade] = useState(''); // corresponde a 'position'
-    const [newAdmissionDate, setNewAdmissionDate] = useState(''); // YYYY-MM-DD
+    const [newEspecialidade, setNewEspecialidade] = useState('');
+    const [newAdmissionDate, setNewAdmissionDate] = useState('');
 
     // Estado para identificar se está editando (contém o usuário a ser editado)
     const [editingUser, setEditingUser] = useState(null);
 
-    // --------------------------------------------------
-    // useEffect: carrega usuário logado e lista de colaboradores
     useEffect(() => {
         const user = getCurrentUser();
         setCurrentUser(user);
         fetchUsersFromBackend();
     }, []);
 
-    // Carrega lista de usuários do backend (GET /auth/users/list)
     const fetchUsersFromBackend = async () => {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
             const response = await api.get('/auth/users/list', {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
             });
             setUsers(response.data);
         } catch (err) {
@@ -74,9 +72,7 @@ export default function Colaboradores() {
     };
 
     // --------------------------------------------------
-    // Abrir/Fechar diálogo
-
-    // Abre o diálogo para criar novo usuário
+    // Diálogo para criar/editar usuário
     const handleOpenDialog = () => {
         setEditingUser(null);
         setNewName('');
@@ -89,7 +85,6 @@ export default function Colaboradores() {
         setOpenDialog(true);
     };
 
-    // Abre o diálogo para editar um usuário existente
     const handleOpenEditDialog = (user) => {
         setEditingUser(user);
         setNewName(user.name);
@@ -107,7 +102,7 @@ export default function Colaboradores() {
     };
 
     // --------------------------------------------------
-    // Função para criar novo usuário ou editar usuário (admin)
+    // Criar/Editar usuário
     const handleSaveUser = async () => {
         if (!currentUser || currentUser.role !== 'admin') {
             alert('Apenas administradores podem criar ou editar usuários.');
@@ -120,25 +115,24 @@ export default function Colaboradores() {
         const token = localStorage.getItem('token');
         try {
             if (editingUser) {
-                // Edição: chama PATCH /auth/users/<id>
+                // Edição
                 const payload = {
                     name: newName,
                     email: newEmail,
                     role: newRole,
                     contact: newContact,
                     position: newEspecialidade,
-                    admission_date: newAdmissionDate
+                    admission_date: newAdmissionDate,
                 };
-                // Se a senha for informada, inclui no payload para atualizar
                 if (newPassword) {
                     payload.password = newPassword;
                 }
                 await api.patch(`/auth/users/${editingUser.id}`, payload, {
-                    headers: { Authorization: `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${token}` },
                 });
                 alert('Usuário atualizado com sucesso!');
             } else {
-                // Criação: chama POST /auth/users
+                // Criação
                 if (!newPassword) {
                     alert('Senha é obrigatória para criação de usuário.');
                     return;
@@ -150,10 +144,10 @@ export default function Colaboradores() {
                     role: newRole,
                     contact: newContact,
                     position: newEspecialidade,
-                    admission_date: newAdmissionDate
+                    admission_date: newAdmissionDate,
                 };
                 await api.post('/auth/users', payload, {
-                    headers: { Authorization: `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${token}` },
                 });
                 alert('Usuário criado com sucesso!');
             }
@@ -166,7 +160,7 @@ export default function Colaboradores() {
     };
 
     // --------------------------------------------------
-    // Função para excluir um usuário
+    // Excluir usuário
     const handleDeleteUser = async (user) => {
         if (!window.confirm(`Tem certeza que deseja excluir o usuário ${user.name}?`)) {
             return;
@@ -174,7 +168,7 @@ export default function Colaboradores() {
         try {
             const token = localStorage.getItem('token');
             await api.delete(`/auth/users/${user.id}`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
             });
             alert('Usuário excluído com sucesso!');
             fetchUsersFromBackend();
@@ -185,7 +179,7 @@ export default function Colaboradores() {
     };
 
     // --------------------------------------------------
-    // Render
+    // Renderização
     if (loading) {
         return (
             <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
@@ -316,13 +310,27 @@ export default function Colaboradores() {
                         <MenuItem value="colaborador">Colaborador</MenuItem>
                         <MenuItem value="convidado">Convidado</MenuItem>
                     </TextField>
-                    <TextField
-                        label="Contato (Telefone)"
+
+                    {/* Campo de telefone com máscara */}
+                    <InputMask
+                        mask="(99) 99999-9999"
+                        maskChar=""
                         value={newContact}
                         onChange={(e) => setNewContact(e.target.value)}
-                        fullWidth
-                        placeholder="Ex.: (11) 99999-8888"
-                    />
+                    >
+                        {/** 
+                         * inputProps => repassa propriedades do InputMask para o TextField 
+                         * Dessa forma, o TextField "herda" o comportamento da máscara.
+                         */}
+                        {(inputProps) => (
+                            <TextField
+                                {...inputProps}
+                                label="Contato (Telefone)"
+                                fullWidth
+                            />
+                        )}
+                    </InputMask>
+
                     <TextField
                         label="Especialidade"
                         value={newEspecialidade}
@@ -330,6 +338,7 @@ export default function Colaboradores() {
                         fullWidth
                         placeholder="Ex.: Suporte N1, Analista, etc."
                     />
+
                     <LocalizationProvider dateAdapter={AdapterDayjs}>
                         <DatePicker
                             label="Data de Admissão"
