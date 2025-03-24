@@ -44,18 +44,23 @@ export default function Clients() {
     const [errorMsg, setErrorMsg] = useState('');
     const [openModal, setOpenModal] = useState(false);
 
-    // Estado do novo cliente (campo "cnpj" representa tanto CPF quanto CNPJ)
+    // Estado para o filtro de busca
+    const [searchTerm, setSearchTerm] = useState('');
+
+    // Estado para o novo cliente, incluindo campo 'owner_name'
     const [newClient, setNewClient] = useState({
         name: '',
         cnpj: '',
         segment: '',
         contactEmail: '',
         contactPhone: '',
+        owner_name: '' // <-- Campo para nome do dono/responsável
     });
 
     const [modalError, setModalError] = useState('');
     const navigate = useNavigate();
 
+    // Busca a lista de clientes ao montar o componente
     const fetchClients = async () => {
         try {
             const response = await api.get('/clients/list');
@@ -83,6 +88,7 @@ export default function Clients() {
             segment: '',
             contactEmail: '',
             contactPhone: '',
+            owner_name: ''
         });
         setModalError('');
         setOpenModal(true);
@@ -92,7 +98,7 @@ export default function Clients() {
         setOpenModal(false);
     };
 
-    // Atualiza os outros campos
+    // Atualiza os campos do novo cliente
     const handleNewClientChange = (e) => {
         const { name, value } = e.target;
         setNewClient((prev) => ({
@@ -119,17 +125,23 @@ export default function Clients() {
     // Máscara dinâmica para CPF/CNPJ com dispatch
     const docMask = {
         mask: [
-            { mask: '000.000.000-00' },          // CPF (11 dígitos)
+            { mask: '000.000.000-00' },           // CPF (11 dígitos)
             { mask: '00.000.000/0000-00' }         // CNPJ (14 dígitos)
         ],
         dispatch: function (appended, dynamicMasked) {
             // Concatena o valor atual com o que está sendo digitado e remove tudo que não é dígito
             const number = (dynamicMasked.value + appended).replace(/\D/g, '');
-
             // Se tiver mais de 11 dígitos, retorna a máscara de CNPJ
             return number.length > 11 ? dynamicMasked.compiledMasks[1] : dynamicMasked.compiledMasks[0];
         },
     };
+
+    // Filtra os clientes com base no termo de busca (nome, e-mail de contato e nome do dono)
+    const filteredClients = clients.filter((client) =>
+        client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (client.contactEmail && client.contactEmail.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (client.ownerName && client.ownerName.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
 
     return (
         <Box>
@@ -142,6 +154,16 @@ export default function Clients() {
                 </Button>
             </Box>
 
+            {/* Campo de pesquisa */}
+            <Box sx={{ mb: 2 }}>
+                <TextField
+                    fullWidth
+                    label="Pesquisar por nome, e-mail ou responsável"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                />
+            </Box>
+
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
                     <CircularProgress />
@@ -150,7 +172,7 @@ export default function Clients() {
                 <Alert severity="error">{errorMsg}</Alert>
             ) : (
                 <Grid container spacing={2} sx={{ justifyContent: { xs: 'center', md: 'flex-start' } }}>
-                    {clients.map((client) => (
+                    {filteredClients.map((client) => (
                         <Grid item key={client.id} xs={12} sm={12} md={6} lg={6}>
                             <Card sx={{ minHeight: 150, minWidth: { xs: 'auto', md: 400 } }}>
                                 <CardActionArea onClick={() => handleCardClick(client.id)}>
@@ -162,6 +184,12 @@ export default function Clients() {
                                         <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
                                             Telefone: {client.contactPhone}
                                         </Typography>
+                                        {/* Exibe o nome do dono/responsável, se existir */}
+                                        {client.ownerName && (
+                                            <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                                                Responsavel: {client.ownerName}
+                                            </Typography>
+                                        )}
                                     </CardContent>
                                 </CardActionArea>
                             </Card>
@@ -218,6 +246,7 @@ export default function Clients() {
                         value={newClient.segment}
                         onChange={handleNewClientChange}
                     />
+
                     <TextField
                         margin="dense"
                         label="E-mail de Contato"
@@ -243,6 +272,17 @@ export default function Clients() {
                                 name: 'contactPhone',
                             },
                         }}
+                    />
+
+                    {/* Campo para nome do dono/responsável */}
+                    <TextField
+                        margin="dense"
+                        label="Nome do Dono (Responsável)"
+                        name="owner_name"
+                        fullWidth
+                        variant="outlined"
+                        value={newClient.owner_name}
+                        onChange={handleNewClientChange}
                     />
                 </DialogContent>
                 <DialogActions>

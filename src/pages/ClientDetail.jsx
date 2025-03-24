@@ -292,9 +292,19 @@ export default function ClientDetail() {
                 {client.name}
             </Typography>
             <Typography variant="body1" sx={{ mb: 2 }}>
-                CNPJ: {client.cnpj} | Segmento: {client.segment}
+                Segmento: {client.segment} | Responsável: {client.ownerName}
             </Typography>
 
+            {/* Exibe o nome do dono/responsável se existir */}
+            {client.ownerName && (
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                    E-mail: {client.contactEmail} | Telefone: {client.contactPhone}
+                </Typography>
+
+            )}
+            <Typography variant="body1" sx={{ mb: 2 }}>
+                CNPJ: {client.cnpj}
+            </Typography>
             {/* Botão: Novo Card */}
             <Button
                 variant="contained"
@@ -348,7 +358,7 @@ export default function ClientDetail() {
                                         {cardName}
                                     </Typography>
 
-                                    {/* Botões Renomear / Excluir Card: empilhados no XS, lado a lado no SM */}
+                                    {/* Botões Renomear / Excluir Card */}
                                     <Box
                                         sx={{
                                             display: 'flex',
@@ -410,7 +420,10 @@ export default function ClientDetail() {
                                                     >
                                                         <EditIcon />
                                                     </IconButton>
-                                                    <IconButton color="error" onClick={() => handleDeleteField(acc.id)}>
+                                                    <IconButton
+                                                        color="error"
+                                                        onClick={() => handleDeleteField(acc.id)}
+                                                    >
                                                         <DeleteIcon />
                                                     </IconButton>
                                                 </TableCell>

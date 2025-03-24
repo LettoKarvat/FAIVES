@@ -218,7 +218,7 @@ export default function Colaboradores() {
                                     variant="outlined"
                                     color={
                                         user.role === 'admin'
-                                            ? 'error'
+                                            ? 'success'
                                             : user.role === 'colaborador'
                                                 ? 'primary'
                                                 : 'default'
@@ -318,10 +318,6 @@ export default function Colaboradores() {
                         value={newContact}
                         onChange={(e) => setNewContact(e.target.value)}
                     >
-                        {/** 
-                         * inputProps => repassa propriedades do InputMask para o TextField 
-                         * Dessa forma, o TextField "herda" o comportamento da máscara.
-                         */}
                         {(inputProps) => (
                             <TextField
                                 {...inputProps}
