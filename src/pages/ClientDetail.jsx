@@ -22,7 +22,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import api from '../services/api';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 
 /** Agrupa os registros por card_name. */
 function groupByCardName(accessList) {
@@ -39,6 +39,7 @@ function groupByCardName(accessList) {
 
 export default function ClientDetail() {
     const { id } = useParams();
+    const navigate = useNavigate();
 
     // Dados do cliente
     const [client, setClient] = useState(null);
@@ -67,6 +68,15 @@ export default function ClientDetail() {
     const [openRenameModal, setOpenRenameModal] = useState(false);
     const [oldCardName, setOldCardName] = useState('');
     const [newCardNameForRename, setNewCardNameForRename] = useState('');
+
+    // -------------- Modal: Editar Cliente --------------
+    const [openEditClientModal, setOpenEditClientModal] = useState(false);
+    const [editName, setEditName] = useState('');
+    const [editCnpj, setEditCnpj] = useState('');
+    const [editSegment, setEditSegment] = useState('');
+    const [editContactEmail, setEditContactEmail] = useState('');
+    const [editContactPhone, setEditContactPhone] = useState('');
+    const [editOwnerName, setEditOwnerName] = useState('');
 
     // ========================================================
     // useEffect - carrega cliente e acessos
@@ -239,7 +249,6 @@ export default function ClientDetail() {
         if (!window.confirm(`Deseja excluir o card '${cardName}' e todos os campos?`)) return;
         try {
             const token = localStorage.getItem('token');
-            // axios DELETE com body
             await api.delete(`/clients/${id}/cards/delete`, {
                 headers: { Authorization: `Bearer ${token}` },
                 data: { card_name: cardName }
@@ -264,6 +273,62 @@ export default function ClientDetail() {
         } catch (err) {
             console.error(err);
             alert('Não foi possível excluir o campo.');
+        }
+    };
+
+    // ========================================================
+    // 6) Editar Cliente
+    const handleOpenEditClientModal = () => {
+        // Preenche os campos com os dados atuais do cliente
+        setEditName(client.name);
+        setEditCnpj(client.cnpj || '');
+        setEditSegment(client.segment || '');
+        setEditContactEmail(client.contactEmail || '');
+        setEditContactPhone(client.contactPhone || '');
+        setEditOwnerName(client.ownerName || '');
+        setOpenEditClientModal(true);
+    };
+
+    const handleCloseEditClientModal = () => setOpenEditClientModal(false);
+
+    const handleSaveClientEdit = async () => {
+        const token = localStorage.getItem('token');
+        try {
+            await api.patch(
+                `/clients/${id}`,
+                {
+                    name: editName,
+                    cnpj: editCnpj,
+                    segment: editSegment,
+                    contactEmail: editContactEmail,
+                    contactPhone: editContactPhone,
+                    owner_name: editOwnerName
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            alert('Cliente atualizado com sucesso!');
+            setOpenEditClientModal(false);
+            fetchClient();
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao atualizar cliente.');
+        }
+    };
+
+    // ========================================================
+    // 7) Excluir Cliente
+    const handleDeleteClient = async () => {
+        if (!window.confirm('Deseja excluir este cliente?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await api.delete(`/clients/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            alert('Cliente excluído com sucesso.');
+            navigate('/clients'); // Redireciona para a lista de clientes
+        } catch (err) {
+            console.error(err);
+            alert('Erro ao excluir cliente.');
         }
     };
 
@@ -294,17 +359,25 @@ export default function ClientDetail() {
             <Typography variant="body1" sx={{ mb: 2 }}>
                 Segmento: {client.segment} | Responsável: {client.ownerName}
             </Typography>
-
-            {/* Exibe o nome do dono/responsável se existir */}
             {client.ownerName && (
                 <Typography variant="body1" sx={{ mb: 2 }}>
                     E-mail: {client.contactEmail} | Telefone: {client.contactPhone}
                 </Typography>
-
             )}
             <Typography variant="body1" sx={{ mb: 2 }}>
                 CNPJ: {client.cnpj}
             </Typography>
+
+            {/* Botões para editar e excluir o cliente */}
+            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <Button variant="outlined" onClick={handleOpenEditClientModal}>
+                    Editar Cliente
+                </Button>
+                <Button variant="outlined" color="error" onClick={handleDeleteClient}>
+                    Excluir Cliente
+                </Button>
+            </Box>
+
             {/* Botão: Novo Card */}
             <Button
                 variant="contained"
@@ -315,7 +388,6 @@ export default function ClientDetail() {
                 Novo Card
             </Button>
 
-            {/* Se acessos ainda carregando */}
             {loadingAccesses ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                     <CircularProgress />
@@ -323,7 +395,6 @@ export default function ClientDetail() {
             ) : errorAccesses ? (
                 <Alert severity="error">{errorAccesses}</Alert>
             ) : (
-                // Renderiza cada card
                 Object.keys(grouped).map((cardName) => {
                     const items = grouped[cardName];
                     return (
@@ -336,7 +407,6 @@ export default function ClientDetail() {
                             key={cardName}
                         >
                             <CardContent sx={{ p: { xs: 1, sm: 2 } }}>
-                                {/* Cabeçalho do Card */}
                                 <Box
                                     sx={{
                                         display: 'flex',
@@ -350,15 +420,13 @@ export default function ClientDetail() {
                                     <Typography
                                         variant="h6"
                                         sx={{
-                                            color: '#64b5f6', // cor de destaque
+                                            color: '#64b5f6',
                                             fontWeight: 'bold',
                                             mb: { xs: 1, sm: 0 }
                                         }}
                                     >
                                         {cardName}
                                     </Typography>
-
-                                    {/* Botões Renomear / Excluir Card */}
                                     <Box
                                         sx={{
                                             display: 'flex',
@@ -382,8 +450,6 @@ export default function ClientDetail() {
                                         </Button>
                                     </Box>
                                 </Box>
-
-                                {/* Tabela dos campos desse card */}
                                 <Table size="small">
                                     <TableBody>
                                         {items.map((acc) => (
@@ -429,8 +495,6 @@ export default function ClientDetail() {
                                                 </TableCell>
                                             </TableRow>
                                         ))}
-
-                                        {/* Botão para "Adicionar Campo" nesse card */}
                                         <TableRow>
                                             <TableCell colSpan={3} align="right" sx={{ borderColor: '#444' }}>
                                                 <Button
@@ -490,7 +554,7 @@ export default function ClientDetail() {
                 </DialogActions>
             </Dialog>
 
-            {/* MODAL: Novo/Editar Campo (reutilizado) */}
+            {/* MODAL: Novo/Editar Campo */}
             <Dialog
                 open={openFieldModal}
                 onClose={() => setOpenFieldModal(false)}
@@ -551,6 +615,66 @@ export default function ClientDetail() {
                 <DialogActions>
                     <Button onClick={() => setOpenRenameModal(false)}>Cancelar</Button>
                     <Button variant="contained" onClick={handleRenameCard}>
+                        Salvar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* MODAL: Editar Cliente */}
+            <Dialog
+                open={openEditClientModal}
+                onClose={handleCloseEditClientModal}
+                fullWidth
+                maxWidth="sm"
+            >
+                <DialogTitle>Editar Cliente</DialogTitle>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                    <TextField
+                        label="Nome"
+                        variant="outlined"
+                        fullWidth
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                    />
+                    <TextField
+                        label="CNPJ"
+                        variant="outlined"
+                        fullWidth
+                        value={editCnpj}
+                        onChange={(e) => setEditCnpj(e.target.value)}
+                    />
+                    <TextField
+                        label="Segmento"
+                        variant="outlined"
+                        fullWidth
+                        value={editSegment}
+                        onChange={(e) => setEditSegment(e.target.value)}
+                    />
+                    <TextField
+                        label="E-mail de Contato"
+                        variant="outlined"
+                        fullWidth
+                        value={editContactEmail}
+                        onChange={(e) => setEditContactEmail(e.target.value)}
+                    />
+                    <TextField
+                        label="Telefone"
+                        variant="outlined"
+                        fullWidth
+                        value={editContactPhone}
+                        onChange={(e) => setEditContactPhone(e.target.value)}
+                    />
+                    <TextField
+                        label="Nome do Dono (Responsável)"
+                        variant="outlined"
+                        fullWidth
+                        value={editOwnerName}
+                        onChange={(e) => setEditOwnerName(e.target.value)}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCloseEditClientModal}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleSaveClientEdit}>
                         Salvar
                     </Button>
                 </DialogActions>
