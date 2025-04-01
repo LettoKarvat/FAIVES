@@ -37,12 +37,6 @@ export default function Layout() {
   const userName = userObject.name || 'Usuário';
   const userRole = userObject.role || '';
 
-  // 3. Redirecionar se não for admin (vai para /tasks)
-  useEffect(() => {
-    if (userRole !== 'admin') {
-      navigate('/tasks');
-    }
-  }, [userRole, navigate]);
 
   // 4. Definir menu, sem 'Dashboard' nem 'Calendário'
   const menuItems = [

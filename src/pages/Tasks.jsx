@@ -15,7 +15,6 @@ import {
   CircularProgress,
   Alert,
   MenuItem,
-  Avatar,
   Snackbar,
   Pagination,
 } from '@mui/material';
@@ -23,12 +22,10 @@ import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import SearchIcon from '@mui/icons-material/Search';
 
 import api from '../services/api';
 
-// Obtém usuário atual do localStorage
 const getCurrentUser = () => {
   const userStr = localStorage.getItem('user');
   return userStr ? JSON.parse(userStr) : null;
@@ -41,7 +38,6 @@ export default function Tasks() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Usuário logado
   const [currentUser, setCurrentUser] = useState(null);
 
   // MODAL: Criar Tarefa
@@ -84,6 +80,14 @@ export default function Tasks() {
   const [snackbarMsg, setSnackbarMsg] = useState('');
   const handleSnackbarClose = () => setSnackbarOpen(false);
 
+  // Expansão da descrição
+  const [expandedIds, setExpandedIds] = useState([]);
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   // -----------------------
   // useEffect inicial
   useEffect(() => {
@@ -95,7 +99,6 @@ export default function Tasks() {
     fetchUsers();
   }, []);
 
-  // -----------------------
   // Buscar tarefas
   const fetchTasks = async () => {
     try {
@@ -105,7 +108,7 @@ export default function Tasks() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // Se o prazo passou e não está concluída, exibe "Em Atraso" no front
+      // Se o prazo passou e não está concluída, exibe "Em Atraso"
       const fetchedTasks = response.data;
       const updatedTasks = fetchedTasks.map((task) => {
         if (
@@ -154,15 +157,20 @@ export default function Tasks() {
   };
 
   // -----------------------
-  // Filtro e Ordenação
+  // Filtro + Ordenação
   const getFilteredAndSortedTasks = () => {
     if (!currentUser) return [];
 
-    // Se não for admin, mostra apenas tarefas sem responsável ou atribuídas a ele
-    let visibleTasks =
-      currentUser.role === 'admin'
-        ? tasks
-        : tasks.filter((t) => !t.assigned_to || t.assigned_to.id === currentUser.id);
+    // *** Ajuste para permitir que "admin" E "colaborador" vejam TODAS as tarefas. ***
+    let visibleTasks;
+    if (currentUser.role === 'admin' || currentUser.role === 'colaborador') {
+      visibleTasks = tasks; // <--- ADICIONADO
+    } else {
+      // Se fosse outro role (ex. "user") que só enxerga tarefas sem responsável ou atribuídas a ele
+      visibleTasks = tasks.filter(
+        (t) => !t.assigned_to || t.assigned_to.id === currentUser.id
+      );
+    }
 
     // FILTRO: busca por título
     if (searchTerm.trim()) {
@@ -183,15 +191,13 @@ export default function Tasks() {
 
     // ORDENAÇÃO
     if (sortBy === 'due_date') {
-      // Ordena pela data de término
       visibleTasks.sort((a, b) => {
         if (!a.due_date) return 1;
         if (!b.due_date) return -1;
         return dayjs(a.due_date).diff(dayjs(b.due_date));
       });
     } else if (sortBy === 'priority') {
-      // Ordena por prioridade (Alta > Média > Baixa)
-      const priorityOrder = { 'Alta': 1, 'Média': 2, 'Baixa': 3 };
+      const priorityOrder = { Alta: 1, Média: 2, Baixa: 3 };
       visibleTasks.sort((a, b) => {
         const aVal = priorityOrder[a.priority] || 99;
         const bVal = priorityOrder[b.priority] || 99;
@@ -215,10 +221,17 @@ export default function Tasks() {
   const handleCloseCreateModal = () => setOpenCreateDialog(false);
 
   const handleCreateTask = async () => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      alert('Apenas admins podem criar novas tarefas.');
+    // *** Permite que "admin" e "colaborador" criem tarefas. ***
+    if (!currentUser) {
+      alert('É preciso estar logado para criar tarefas.');
       return;
     }
+
+    if (currentUser.role !== 'admin' && currentUser.role !== 'colaborador') {
+      alert('Você não tem permissão para criar tarefas.');
+      return;
+    }
+
     if (!newTitle) {
       alert('Título é obrigatório');
       return;
@@ -239,8 +252,20 @@ export default function Tasks() {
       };
       if (newStartDate) payload.start_date = newStartDate;
       if (newDueDate) payload.due_date = newDueDate;
-      if (newProjectId) payload.project_id = parseInt(newProjectId, 10);
-      if (newAssignedTo) payload.assigned_to_user_id = parseInt(newAssignedTo, 10);
+
+      // *** Se for "admin", pode escolher o project e assigned_to normalmente. ***
+      // *** Se for "colaborador", obriga a atribuição a si mesmo. ***
+      if (currentUser.role === 'admin') {
+        if (newProjectId) payload.project_id = parseInt(newProjectId, 10);
+        if (newAssignedTo) {
+          payload.assigned_to_user_id = parseInt(newAssignedTo, 10);
+        }
+      } else if (currentUser.role === 'colaborador') {
+        // Se quiser permitir escolher o projeto também para colaborador, basta deixar:
+        if (newProjectId) payload.project_id = parseInt(newProjectId, 10);
+        // Mas a tarefa será atribuída ao próprio colaborador, independente do que estiver no campo.
+        payload.assigned_to_user_id = currentUser.id; // <--- ADICIONADO
+      }
 
       await api.post('/tasks/create', payload, {
         headers: { Authorization: `Bearer ${token}` },
@@ -267,14 +292,10 @@ export default function Tasks() {
   };
 
   // -----------------------
-  // Clique no Card => Assign or Conclude
+  // Clique no Card => assumir ou concluir
   const handleCardClick = (task) => {
     if (!currentUser) return;
-
-    // Se já concluída, não faz nada
-    if (task.status && task.status.toLowerCase().includes('conclu')) {
-      return;
-    }
+    if (task.status?.toLowerCase().includes('conclu')) return;
 
     const assignedUser = task.assigned_to;
     if (!assignedUser) {
@@ -288,7 +309,6 @@ export default function Tasks() {
     }
   };
 
-  // Atribuir tarefa a mim
   const handleAssignToMe = async (taskId) => {
     if (!currentUser) return;
     try {
@@ -307,7 +327,6 @@ export default function Tasks() {
     }
   };
 
-  // Concluir Tarefa
   const handleCompleteTask = async (taskId) => {
     if (!currentUser) return;
     try {
@@ -335,6 +354,7 @@ export default function Tasks() {
     setEditTitle(task.title || '');
     setEditDescription(task.description || '');
     setEditProjectId(task.project ? String(task.project.id) : '');
+    // Se estava "Em Atraso", consideramos que o status real é "Em Andamento".
     setEditStatus(task.status === 'Em Atraso' ? 'Em Andamento' : task.status || 'Pendente');
     setEditPriority(task.priority || 'Baixa');
     setEditStartDate(task.start_date || '');
@@ -346,7 +366,7 @@ export default function Tasks() {
   const handleCloseEditModal = () => setOpenEditDialog(false);
 
   const handleUpdateTask = async () => {
-    if (!currentUser || currentUser.role !== 'admin') return;
+    if (!currentUser || currentUser.role !== 'admin') return; // <--- SOMENTE ADMIN
     if (!editTaskId) {
       alert('Nenhuma tarefa selecionada');
       return;
@@ -389,7 +409,7 @@ export default function Tasks() {
   };
 
   const handleDeleteTask = async (taskId) => {
-    if (!currentUser || currentUser.role !== 'admin') return;
+    if (!currentUser || currentUser.role !== 'admin') return; // <--- SOMENTE ADMIN
     if (!window.confirm('Deseja excluir esta tarefa?')) return;
 
     try {
@@ -436,15 +456,6 @@ export default function Tasks() {
     }
   };
 
-  // -----------------------
-  // Truncar descrição (exemplo 100 chars)
-  const [expandedIds, setExpandedIds] = useState([]);
-  const toggleExpand = (id) => {
-    setExpandedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
   const getTruncatedText = (text, id) => {
     if (!text) return 'N/A';
     const limit = 100;
@@ -456,7 +467,6 @@ export default function Tasks() {
 
   // -----------------------
   // Render
-
   if (loading) {
     return (
       <Box sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
@@ -535,7 +545,8 @@ export default function Tasks() {
         </TextField>
       </Box>
 
-      {currentUser?.role === 'admin' && (
+      {/* Botão "Nova Tarefa" visível p/ admin e colaborador */}
+      {currentUser && (currentUser.role === 'admin' || currentUser.role === 'colaborador') && (
         <Button variant="contained" sx={{ mb: 2 }} onClick={handleOpenCreateModal}>
           Nova Tarefa
         </Button>
@@ -552,8 +563,6 @@ export default function Tasks() {
             start_date,
             due_date,
             assigned_to,
-            created_at,
-            updated_at,
           } = task;
 
           const projectName = project ? project.name : 'Nenhum';
@@ -562,10 +571,7 @@ export default function Tasks() {
 
           const isAssigned = !!assignedToName;
 
-          // Ajusta cor de fundo se não tem responsável
-          // E define cursor: pointer se:
-          //   - não tem responsável, ou
-          //   - responsável é o usuário
+          // Define estilo do card (apenas exemplo)
           const cardSx = {
             backgroundColor: !isAssigned ? '#0c0e2b' : 'inherit',
             cursor:
@@ -609,9 +615,7 @@ export default function Tasks() {
                   <Typography variant="body2" sx={{ mt: 1 }}>
                     Início: {start_date || '-'}
                   </Typography>
-                  <Typography variant="body2">
-                    Fim: {due_date || '-'}
-                  </Typography>
+                  <Typography variant="body2">Fim: {due_date || '-'}</Typography>
 
                   <Typography variant="body2" sx={{ mt: 1 }}>
                     Descrição: {truncatedDesc}
@@ -645,7 +649,7 @@ export default function Tasks() {
                       <Button
                         variant="outlined"
                         onClick={(e) => {
-                          e.stopPropagation(); // não disparar handleCardClick
+                          e.stopPropagation();
                           handleOpenEditModal(task);
                         }}
                       >
@@ -703,12 +707,16 @@ export default function Tasks() {
             value={newDescription}
             onChange={(e) => setNewDescription(e.target.value)}
           />
+
+          {/* Se quiser permitir que COLABORADOR também escolha projeto, pode deixar este campo.
+              Caso contrário, você pode omitir completamente. */}
           <TextField
             select
             label="Projeto (opcional)"
             value={newProjectId}
             onChange={(e) => setNewProjectId(e.target.value)}
             fullWidth
+            disabled={currentUser?.role !== 'admin'} // <--- Se quiser só admin escolhendo
           >
             <MenuItem value="">
               <em>Nenhum</em>
@@ -742,9 +750,6 @@ export default function Tasks() {
             onChange={(e) => setNewPriority(e.target.value)}
             fullWidth
           >
-            <MenuItem value="">
-              <em>Selecione</em>
-            </MenuItem>
             <MenuItem value="Alta">Alta</MenuItem>
             <MenuItem value="Média">Média</MenuItem>
             <MenuItem value="Baixa">Baixa</MenuItem>
@@ -784,22 +789,26 @@ export default function Tasks() {
             />
           </LocalizationProvider>
 
-          <TextField
-            select
-            label="Atribuir a (opcional)"
-            value={newAssignedTo}
-            onChange={(e) => setNewAssignedTo(e.target.value)}
-            fullWidth
-          >
-            <MenuItem value="">
-              <em>Nenhum</em>
-            </MenuItem>
-            {users.map((user) => (
-              <MenuItem key={user.id} value={user.id}>
-                {user.name}
+          {/* Se for admin, exibe campo para escolher responsável;
+              se for colaborador, ocultamos ou desabilitamos. */}
+          {currentUser?.role === 'admin' && (
+            <TextField
+              select
+              label="Atribuir a (opcional)"
+              value={newAssignedTo}
+              onChange={(e) => setNewAssignedTo(e.target.value)}
+              fullWidth
+            >
+              <MenuItem value="">
+                <em>Nenhum</em>
               </MenuItem>
-            ))}
-          </TextField>
+              {users.map((user) => (
+                <MenuItem key={user.id} value={user.id}>
+                  {user.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseCreateModal}>Cancelar</Button>
@@ -809,7 +818,7 @@ export default function Tasks() {
         </DialogActions>
       </Dialog>
 
-      {/* MODAL: EDITAR TAREFA */}
+      {/* MODAL: EDITAR TAREFA - somente admin */}
       <Dialog
         open={openEditDialog}
         onClose={handleCloseEditModal}

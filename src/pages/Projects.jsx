@@ -32,7 +32,10 @@ export default function Projects() {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [errorProjects, setErrorProjects] = useState('');
 
-  // Modal de criação
+  // Armazena informações do usuário atual
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Modal de criação de projeto
   const [openModal, setOpenModal] = useState(false);
   const [projectForm, setProjectForm] = useState({
     name: '',
@@ -42,30 +45,54 @@ export default function Projects() {
     status: '',
     deadline: '',
     description: '',
-    // Removendo o campo de progresso do formulário e definindo diretamente 0 no create
   });
   const [modalError, setModalError] = useState('');
 
-  // Diálogo para adicionar usuários extras
+  // Modal para adicionar responsáveis extras
   const [openAssociateDialog, setOpenAssociateDialog] = useState(false);
   const [selectedAssociateUser, setSelectedAssociateUser] = useState('');
 
-  // Hook de navegação do react-router-dom
+  // Hook de navegação
   const navigate = useNavigate();
 
-  // Buscar projetos do backend
+  // 1. Carrega o usuário do localStorage ao montar o componente
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      setCurrentUser(JSON.parse(userStr));
+    } else {
+      setCurrentUser(null);
+    }
+  }, []);
+
+  // 2. Quando "currentUser" estiver definido, busca projetos
+  useEffect(() => {
+    if (currentUser) {
+      fetchProjects();
+    }
+  }, [currentUser]);
+
+  // 3. Busca clients e users independentemente, sem depender do currentUser
+  useEffect(() => {
+    fetchClients();
+    fetchUsers();
+  }, []);
+
+  // Busca projetos
   const fetchProjects = async () => {
     try {
+      setLoadingProjects(true);
       const token = localStorage.getItem('token');
+
       const response = await api.get('/projects/list', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      // Ajuste para verificar se o prazo passou da data atual
-      const fetchedProjects = response.data;
-      const updatedProjects = fetchedProjects.map((proj) => {
+      // Se prazo passou e não está concluído, marcar como "Em Atraso" no front
+      let fetchedProjects = response.data;
+      let updatedProjects = fetchedProjects.map((proj) => {
         if (
           proj.deadline &&
           dayjs(proj.deadline).isBefore(dayjs()) &&
@@ -76,6 +103,17 @@ export default function Projects() {
         return proj;
       });
 
+      // Se usuário for "convidado", mostra apenas projetos em que ele é responsável ou associado
+      if (currentUser?.role === 'convidado') {
+        updatedProjects = updatedProjects.filter((proj) => {
+          const isResponsible = proj.responsible?.id === currentUser.id;
+          const isAssociated = proj.associated_users?.some(
+            (u) => u.id === currentUser.id
+          );
+          return isResponsible || isAssociated;
+        });
+      }
+
       setProjects(updatedProjects);
     } catch (error) {
       console.error('Erro ao buscar projetos:', error);
@@ -85,7 +123,7 @@ export default function Projects() {
     }
   };
 
-  // Buscar clientes
+  // Busca clientes
   const fetchClients = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -100,7 +138,7 @@ export default function Projects() {
     }
   };
 
-  // Buscar usuários
+  // Busca usuários
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -115,13 +153,14 @@ export default function Projects() {
     }
   };
 
-  useEffect(() => {
-    fetchProjects();
-    fetchClients();
-    fetchUsers();
-  }, []);
-
+  // Abre modal de criar projeto
   const handleOpenModal = () => {
+    // Se for convidado, bloquear
+    if (currentUser?.role === 'convidado') {
+      alert('Você não tem permissão para criar projetos.');
+      return;
+    }
+
     setProjectForm({
       name: '',
       client_id: '',
@@ -135,10 +174,12 @@ export default function Projects() {
     setOpenModal(true);
   };
 
+  // Fecha modal de criar projeto
   const handleCloseModal = () => {
     setOpenModal(false);
   };
 
+  // Atualiza campos do formulário
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setProjectForm((prev) => ({
@@ -147,7 +188,7 @@ export default function Projects() {
     }));
   };
 
-  // DatePicker
+  // Atualiza o prazo (DatePicker)
   const handleDeadlineChange = (newDate) => {
     if (!newDate) {
       setProjectForm((prev) => ({ ...prev, deadline: '' }));
@@ -157,18 +198,23 @@ export default function Projects() {
     }
   };
 
+  // Cria o projeto
   const handleCreateProject = async () => {
+    // Verificação de role "convidado"
+    if (!currentUser || currentUser.role === 'convidado') {
+      alert('Você não tem permissão para criar projetos.');
+      return;
+    }
+
     if (!projectForm.name || !projectForm.responsible_user_id) {
       setModalError('Os campos "Nome" e "Responsável" são obrigatórios.');
       return;
     }
     try {
       const token = localStorage.getItem('token');
-
-      // Forçando o progresso a sempre ser 0 no momento da criação
       const payload = {
         ...projectForm,
-        progress: 0,
+        progress: 0, // força o progresso inicial a zero
       };
 
       await api.post('/projects/create', payload, {
@@ -185,16 +231,14 @@ export default function Projects() {
     }
   };
 
-  // Adicionar usuário extra
+  // Modal de adicionar responsável associado
   const handleOpenAssociateDialog = () => {
     setSelectedAssociateUser('');
     setOpenAssociateDialog(true);
   };
-
   const handleCloseAssociateDialog = () => {
     setOpenAssociateDialog(false);
   };
-
   const handleAddAssociateUser = () => {
     if (!selectedAssociateUser) return;
     if (projectForm.associated_user_ids.includes(selectedAssociateUser)) {
@@ -206,7 +250,6 @@ export default function Projects() {
     }));
     setOpenAssociateDialog(false);
   };
-
   const handleRemoveAssociateUser = (userId) => {
     setProjectForm((prev) => ({
       ...prev,
@@ -220,11 +263,15 @@ export default function Projects() {
         <Typography variant="h4" gutterBottom>
           Projetos
         </Typography>
-        <Button variant="contained" onClick={handleOpenModal}>
-          Novo Projeto
-        </Button>
+        {/* Só exibe o botão de Novo Projeto se não for convidado */}
+        {currentUser && currentUser.role !== 'convidado' && (
+          <Button variant="contained" onClick={handleOpenModal}>
+            Novo Projeto
+          </Button>
+        )}
       </Box>
 
+      {/* Se ainda carregando, exibe spinner; se erro, exibe alerta; caso contrário, lista projetos */}
       {loadingProjects ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <CircularProgress />
@@ -234,7 +281,7 @@ export default function Projects() {
       ) : (
         <Grid container spacing={2}>
           {projects.map((project) => {
-            // Juntar "responsible" + "associated_users" para exibir como "Responsáveis"
+            // Combina responsável principal + responsáveis associados
             const allResponsibles = [];
             if (project.responsible) {
               allResponsibles.push(project.responsible);
@@ -279,7 +326,6 @@ export default function Projects() {
                       Prazo: {project.deadline || 'N/A'}
                     </Typography>
 
-                    {/* Se seu back-end não removeu o progress, deixamos a barra abaixo */}
                     <Typography variant="body2" sx={{ mt: 1 }}>
                       Progresso:
                     </Typography>
@@ -288,9 +334,7 @@ export default function Projects() {
                       value={project.progress}
                       sx={{ height: 8, borderRadius: 2, mt: 0.5 }}
                     />
-                    <Typography variant="caption">
-                      {project.progress}%
-                    </Typography>
+                    <Typography variant="caption">{project.progress}%</Typography>
 
                     {allResponsibles.length > 0 && (
                       <Typography variant="body2" sx={{ mt: 1 }}>
@@ -305,7 +349,7 @@ export default function Projects() {
         </Grid>
       )}
 
-      {/* Dialog de criar projeto */}
+      {/* Modal: Criar Projeto */}
       <Dialog open={openModal} onClose={handleCloseModal} fullWidth maxWidth="sm">
         <DialogTitle>Novo Projeto</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
@@ -367,7 +411,7 @@ export default function Projects() {
             </IconButton>
           </Box>
 
-          {/* Chips para remover responsáveis extras */}
+          {/* Chips para responsáveis adicionais */}
           {projectForm.associated_user_ids.length > 0 && (
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
               {projectForm.associated_user_ids.map((userId) => {
@@ -383,7 +427,6 @@ export default function Projects() {
             </Box>
           )}
 
-          {/* Transformando em select para Pendente / Em Andamento / Concluído */}
           <TextField
             select
             label="Status"
@@ -430,8 +473,13 @@ export default function Projects() {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog para adicionar outro responsável (associado) */}
-      <Dialog open={openAssociateDialog} onClose={handleCloseAssociateDialog} maxWidth="xs" fullWidth>
+      {/* Modal: Adicionar responsável associado */}
+      <Dialog
+        open={openAssociateDialog}
+        onClose={handleCloseAssociateDialog}
+        maxWidth="xs"
+        fullWidth
+      >
         <DialogTitle>Adicionar Outro Responsável</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           <TextField
