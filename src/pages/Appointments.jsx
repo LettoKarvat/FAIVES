@@ -15,15 +15,18 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 
+// Import para DatePickers do MUI
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers';
 
 import api from '../services/api';
 
+// Estilos RBC
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './CalendarDark.css';
 
+// Configura localizador RBC com moment
 const localizer = momentLocalizer(moment);
 const DnDCalendar = withDragAndDrop(Calendar);
 
@@ -40,6 +43,7 @@ function checkOverlap(appointments, userId, start, end, ignoreId) {
   });
 }
 
+// Mapeia cores para usuários
 const userColorMap = {
   1: '#f44336',
   2: '#2196f3',
@@ -47,6 +51,7 @@ const userColorMap = {
   4: '#9c27b0',
 };
 
+// Custom para Agenda
 function CustomAgendaEvent({ event }) {
   const analystName = event.resource?.assigned_to?.name || '—';
   return (
@@ -57,7 +62,7 @@ function CustomAgendaEvent({ event }) {
 }
 
 export default function CalendarWithDayView() {
-  // Usuário logado
+  // Verifica o usuário logado no localStorage
   const storedUser = localStorage.getItem('user');
   const currentUser = storedUser ? JSON.parse(storedUser) : {};
   const isConvidado = currentUser.role === 'convidado';
@@ -68,7 +73,7 @@ export default function CalendarWithDayView() {
   const [clients, setClients] = useState([]);
   const [projects, setProjects] = useState([]);
 
-  // Filtro para usuários não-convidados
+  // Filtro por usuário (para usuários não-convidados)
   const [selectedUserFilter, setSelectedUserFilter] = useState('');
 
   // MODAL: CRIAR
@@ -105,13 +110,13 @@ export default function CalendarWithDayView() {
     projectId: '',
   });
 
-  // MODAL: COPIAR INTERVALO (já existente)
+  // MODAL: COPIAR INTERVALO
   const [openCopyRangeModal, setOpenCopyRangeModal] = useState(false);
   const [sourceStart, setSourceStart] = useState(null);
   const [sourceEnd, setSourceEnd] = useState(null);
   const [targetStart, setTargetStart] = useState(null);
 
-  // MODAL: COPIAR UM DIA (cópia de todos os compromissos do dia)
+  // MODAL: COPIAR UM DIA (todos os compromissos do dia)
   const [openCopyDayModal, setOpenCopyDayModal] = useState(false);
   const [copyTargetDay, setCopyTargetDay] = useState(null);
 
@@ -120,9 +125,11 @@ export default function CalendarWithDayView() {
   const [copyAppointment, setCopyAppointment] = useState(null);
   const [copyAppointmentTargetDate, setCopyAppointmentTargetDate] = useState(null);
 
+  // Responsividade: Detectar se é mobile
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
+  // --- SNACKBAR ---
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
 
@@ -174,9 +181,9 @@ export default function CalendarWithDayView() {
     }
   }
 
-  // Filtra os compromissos:
-  // - Convidado: somente os atribuídos a ele.
-  // - Outros: se filtrado, exibe conforme usuário selecionado.
+  // Filtrar appointments:
+  // - Se for "convidado": mostra somente os compromissos atribuídos a ele.
+  // - Caso contrário, se houver filtro selecionado, filtra conforme o usuário selecionado.
   const filteredAppointments = useMemo(() => {
     let filtered = appointments;
     if (isConvidado) {
@@ -567,7 +574,6 @@ export default function CalendarWithDayView() {
       showNotification('Sobreposição! O usuário já tem compromisso nesse horário na data de destino.');
       return;
     }
-    // Cria um novo compromisso copiando os dados do original, mas com a data alterada
     const payload = {
       title: copyAppointment.title,
       description: copyAppointment.description,
@@ -621,6 +627,13 @@ export default function CalendarWithDayView() {
     margin: '0 auto'
   };
 
+  // Estilo para os botões de cópia com fundo transparente e borda verde
+  const copyButtonStyle = {
+    color: '#4caf50',
+    borderColor: '#4caf50',
+    '&:hover': { backgroundColor: 'rgba(0, 255, 8, 0.2)' }
+  };
+
   return (
     <div style={{ padding: isMobile ? 8 : 16 }}>
       <div style={{
@@ -651,7 +664,7 @@ export default function CalendarWithDayView() {
             <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenModal}>
               Novo Compromisso
             </Button>
-            <Button variant="outlined" sx={{ color: '#fff', borderColor: '#fff' }} onClick={handleOpenCopyRangeModal}>
+            <Button variant="outlined" sx={copyButtonStyle} onClick={handleOpenCopyRangeModal}>
               Copiar Intervalo (Semana, etc.)
             </Button>
           </>
@@ -768,7 +781,11 @@ export default function CalendarWithDayView() {
                     <Button variant="outlined" color="error" onClick={() => handleDeleteAppointment(ap.id)}>
                       Excluir
                     </Button>
-                    <Button variant="outlined" onClick={() => handleOpenCopyAppointment(ap)}>
+                    <Button
+                      variant="outlined"
+                      sx={copyButtonStyle}
+                      onClick={() => handleOpenCopyAppointment(ap)}
+                    >
                       Copiar
                     </Button>
                   </CardActions>
@@ -779,7 +796,7 @@ export default function CalendarWithDayView() {
         </DialogContent>
         <DialogActions sx={{ display: 'flex', justifyContent: 'space-between' }}>
           {!isConvidado && (
-            <Button variant="contained" sx={{ bgcolor: '#3f51b5', color: '#fff' }} onClick={handleOpenCopyDayModal}>
+            <Button variant="outlined" sx={copyButtonStyle} onClick={handleOpenCopyDayModal}>
               Copiar compromissos
             </Button>
           )}
@@ -811,7 +828,7 @@ export default function CalendarWithDayView() {
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'space-between', mx: 3, my: 2 }}>
           <Button onClick={handleCloseCopyDayModal}>Cancelar</Button>
-          <Button variant="contained" onClick={handleSubmitCopyDay}>Copiar</Button>
+          <Button variant="outlined" sx={copyButtonStyle} onClick={handleSubmitCopyDay}>Copiar</Button>
         </DialogActions>
       </Dialog>
 
@@ -849,7 +866,7 @@ export default function CalendarWithDayView() {
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'space-between', mx: 3, my: 2 }}>
           <Button onClick={handleCloseCopyRangeModal}>Cancelar</Button>
-          <Button variant="contained" onClick={handleSubmitCopyRange}>Copiar</Button>
+          <Button variant="outlined" sx={copyButtonStyle} onClick={handleSubmitCopyRange}>Copiar</Button>
         </DialogActions>
       </Dialog>
 
@@ -928,7 +945,7 @@ export default function CalendarWithDayView() {
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'space-between', mx: 3, my: 2 }}>
           <Button onClick={handleCloseCopyAppointmentModal}>Cancelar</Button>
-          <Button variant="contained" onClick={handleSubmitCopyAppointment}>Copiar</Button>
+          <Button variant="outlined" sx={copyButtonStyle} onClick={handleSubmitCopyAppointment}>Copiar</Button>
         </DialogActions>
       </Dialog>
 
