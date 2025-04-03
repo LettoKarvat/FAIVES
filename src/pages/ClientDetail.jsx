@@ -17,12 +17,15 @@ import {
     DialogActions,
     TextField,
     CircularProgress,
-    Alert
+    Alert,
+    InputAdornment
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RemoveIcon from '@mui/icons-material/Remove';
+import SearchIcon from '@mui/icons-material/Search';
+
 import api from '../services/api';
 import { useParams, useNavigate } from 'react-router-dom';
 
@@ -215,6 +218,18 @@ export default function ClientDetail() {
     const [editContactEmail, setEditContactEmail] = useState('');
     const [editContactPhone, setEditContactPhone] = useState('');
     const [editOwnerName, setEditOwnerName] = useState('');
+
+    // -------- MELHORIAS ----------
+    // Filtro (busca por CardName)
+    const [searchTerm, setSearchTerm] = useState('');
+
+    // Controle de expansão/colapso dos cards
+    // Cada chave será o cardName, e o valor um boolean indicando se está expandido ou não.
+    const [expandedCards, setExpandedCards] = useState({});
+
+    // Paginação de cards
+    const [currentPage, setCurrentPage] = useState(1);
+    const cardsPerPage = 5; // ajuste se quiser mais/menos cards por página
 
     // ----------------------------------------
     // Carregar cliente e acessos
@@ -477,6 +492,60 @@ export default function ClientDetail() {
     };
 
     // ----------------------------------------
+    // Lógica de Busca + Paginação
+    const grouped = groupByCardName(accesses);
+    // Lista de nomes de cards
+    const allCardNames = Object.keys(grouped);
+
+    // Filtra os cards pelo searchTerm
+    const filteredCardNames = allCardNames.filter((cardName) =>
+        cardName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // Paginação: total de páginas baseado nos cards filtrados
+    const totalPages = Math.ceil(filteredCardNames.length / cardsPerPage);
+
+    // Ajusta currentPage se a busca fez cair em uma página que não existe mais
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(1);
+        }
+        // eslint-disable-next-line
+    }, [searchTerm, totalPages]);
+
+    // Pega cardNames da página atual
+    const startIndex = (currentPage - 1) * cardsPerPage;
+    const endIndex = startIndex + cardsPerPage;
+    const paginatedCardNames = filteredCardNames.slice(startIndex, endIndex);
+
+    // ----------------------------------------
+    // Expandir/Colapsar Cards
+    const toggleCardExpand = (cardName) => {
+        setExpandedCards((prev) => ({
+            ...prev,
+            [cardName]: !prev[cardName]
+        }));
+    };
+
+    const handleExpandAll = () => {
+        // marca todos como true
+        const expandedAll = {};
+        filteredCardNames.forEach((name) => {
+            expandedAll[name] = true;
+        });
+        setExpandedCards(expandedAll);
+    };
+
+    const handleCollapseAll = () => {
+        // marca todos como false
+        const collapsedAll = {};
+        filteredCardNames.forEach((name) => {
+            collapsedAll[name] = false;
+        });
+        setExpandedCards(collapsedAll);
+    };
+
+    // ----------------------------------------
     // RENDER
     if (loadingClient) {
         return (
@@ -492,8 +561,6 @@ export default function ClientDetail() {
             </Box>
         );
     }
-
-    const grouped = groupByCardName(accesses);
 
     return (
         <Box sx={{ p: 2 }}>
@@ -521,24 +588,77 @@ export default function ClientDetail() {
                 </Button>
             </Box>
 
-            <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={handleOpenNewCardModal}
-                sx={{ mb: 3 }}
-            >
-                Novo Card
-            </Button>
+            {/* Botões adicionais para cards */}
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
+                <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={handleOpenNewCardModal}
+                >
+                    Novo Card
+                </Button>
 
+                <Button variant="outlined" onClick={handleExpandAll}>
+                    Expandir Todos
+                </Button>
+                <Button variant="outlined" onClick={handleCollapseAll}>
+                    Colapsar Todos
+                </Button>
+
+                <TextField
+                    variant="outlined"
+                    size="small"
+                    placeholder="Buscar Card..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    InputProps={{
+                        startAdornment: (
+                            <InputAdornment position="start">
+                                <SearchIcon />
+                            </InputAdornment>
+                        )
+                    }}
+                    sx={{ width: 240 }}
+                />
+            </Box>
+
+            {/* Paginação: mostrar botões se houver mais de 1 página */}
+            {totalPages > 1 && (
+                <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <Button
+                        variant="outlined"
+                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                    >
+                        Anterior
+                    </Button>
+                    <Typography>
+                        Página {currentPage} de {totalPages}
+                    </Typography>
+                    <Button
+                        variant="outlined"
+                        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                    >
+                        Próxima
+                    </Button>
+                </Box>
+            )}
+
+            {/* LISTAGEM DE CARDS */}
             {loadingAccesses ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                     <CircularProgress />
                 </Box>
             ) : errorAccesses ? (
                 <Alert severity="error">{errorAccesses}</Alert>
+            ) : paginatedCardNames.length === 0 ? (
+                <Alert severity="info">Nenhum Card encontrado.</Alert>
             ) : (
-                Object.keys(grouped).map((cardName) => {
+                paginatedCardNames.map((cardName) => {
                     const items = grouped[cardName];
+                    const isExpanded = expandedCards[cardName] || false;
+
                     return (
                         <Card
                             sx={{
@@ -578,86 +698,96 @@ export default function ClientDetail() {
                                     >
                                         <Button
                                             variant="outlined"
+                                            sx={{ color: '#64b5f6', borderColor: '#64b5f6' }}
+                                            onClick={() => toggleCardExpand(cardName)}
+                                        >
+                                            {isExpanded ? 'Colapsar' : 'Expandir'}
+                                        </Button>
+                                        <Button
+                                            variant="outlined"
                                             onClick={() => handleOpenRenameModal(cardName)}
                                             sx={{ color: '#64b5f6', borderColor: '#64b5f6' }}
                                         >
-                                            Renomear Card
+                                            Renomear
                                         </Button>
                                         <Button
                                             variant="outlined"
                                             color="error"
                                             onClick={() => handleDeleteCard(cardName)}
                                         >
-                                            Excluir Card
+                                            Excluir
                                         </Button>
                                     </Box>
                                 </Box>
-                                <Table size="small">
-                                    <TableBody>
-                                        {items.map((acc) => (
-                                            <TableRow key={acc.id}>
-                                                <TableCell
-                                                    sx={{
-                                                        width: '30%',
-                                                        color: 'white',
-                                                        borderColor: '#444'
-                                                    }}
-                                                >
-                                                    {acc.field_name}
-                                                </TableCell>
-                                                <TableCell
-                                                    sx={{
-                                                        width: '50%',
-                                                        color: 'white',
-                                                        borderColor: '#444'
-                                                    }}
-                                                >
-                                                    {renderFieldValue(acc.field_value)}
-                                                </TableCell>
-                                                <TableCell
-                                                    sx={{
-                                                        width: '20%',
-                                                        color: 'white',
-                                                        borderColor: '#444'
-                                                    }}
-                                                >
-                                                    <IconButton
-                                                        color="primary"
-                                                        onClick={() => handleOpenEditField(acc)}
-                                                        sx={{ mr: 1 }}
+
+                                {isExpanded && (
+                                    <Table size="small">
+                                        <TableBody>
+                                            {items.map((acc) => (
+                                                <TableRow key={acc.id}>
+                                                    <TableCell
+                                                        sx={{
+                                                            width: '30%',
+                                                            color: 'white',
+                                                            borderColor: '#444'
+                                                        }}
                                                     >
-                                                        <EditIcon />
-                                                    </IconButton>
-                                                    <IconButton
-                                                        color="error"
-                                                        onClick={() => handleDeleteField(acc.id)}
+                                                        {acc.field_name}
+                                                    </TableCell>
+                                                    <TableCell
+                                                        sx={{
+                                                            width: '50%',
+                                                            color: 'white',
+                                                            borderColor: '#444'
+                                                        }}
                                                     >
-                                                        <DeleteIcon />
-                                                    </IconButton>
+                                                        {renderFieldValue(acc.field_value)}
+                                                    </TableCell>
+                                                    <TableCell
+                                                        sx={{
+                                                            width: '20%',
+                                                            color: 'white',
+                                                            borderColor: '#444'
+                                                        }}
+                                                    >
+                                                        <IconButton
+                                                            color="primary"
+                                                            onClick={() => handleOpenEditField(acc)}
+                                                            sx={{ mr: 1 }}
+                                                        >
+                                                            <EditIcon />
+                                                        </IconButton>
+                                                        <IconButton
+                                                            color="error"
+                                                            onClick={() => handleDeleteField(acc.id)}
+                                                        >
+                                                            <DeleteIcon />
+                                                        </IconButton>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                            <TableRow
+                                                sx={{
+                                                    borderBottom: '2px solid #555',
+                                                    '& > td': {
+                                                        borderBottom: '0 !important'
+                                                    }
+                                                }}
+                                            >
+                                                <TableCell colSpan={3} align="right" sx={{ borderColor: '#444' }}>
+                                                    <Button
+                                                        variant="outlined"
+                                                        startIcon={<AddIcon />}
+                                                        onClick={() => handleOpenCreateField(cardName)}
+                                                        sx={{ color: '#64b5f6', borderColor: '#64b5f6' }}
+                                                    >
+                                                        Adicionar Campo
+                                                    </Button>
                                                 </TableCell>
                                             </TableRow>
-                                        ))}
-                                        <TableRow
-                                            sx={{
-                                                borderBottom: '2px solid #555',
-                                                '& > td': {
-                                                    borderBottom: '0 !important' // remove a linha fina das cells
-                                                }
-                                            }}>
-
-                                            <TableCell colSpan={3} align="right" sx={{ borderColor: '#444' }}>
-                                                <Button
-                                                    variant="outlined"
-                                                    startIcon={<AddIcon />}
-                                                    onClick={() => handleOpenCreateField(cardName)}
-                                                    sx={{ color: '#64b5f6', borderColor: '#64b5f6' }}
-                                                >
-                                                    Adicionar Campo
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    </TableBody>
-                                </Table>
+                                        </TableBody>
+                                    </Table>
+                                )}
                             </CardContent>
                         </Card>
                     );
@@ -693,7 +823,7 @@ export default function ClientDetail() {
                         fullWidth
                         value={newFieldValue}
                         onChange={(e) => setNewFieldValue(e.target.value)}
-                        helperText="Pode ser texto simples. Para vários valores, use Adicionar Campo depois."
+                        helperText="Para vários valores, use 'Adicionar Campo' depois."
                     />
                 </DialogContent>
                 <DialogActions>

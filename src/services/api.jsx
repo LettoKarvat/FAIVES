@@ -1,15 +1,15 @@
 import axios from 'axios';
 
-//const baseURL = import.meta.env.VITE_BASE_URL_API || 'https://ab2e-206-84-60-250.ngrok-free.app/api';
-const baseURL = import.meta.env.VITE_BASE_URL_API || 'http://127.0.0.1:5000/api';
+const baseURL = import.meta.env.VITE_BASE_URL_API || 'https://ab2e-206-84-60-250.ngrok-free.app/api';
+//const baseURL = import.meta.env.VITE_BASE_URL_API || 'http://127.0.0.1:5000/api';
 
 console.log('Base URL:', baseURL);
 
 const api = axios.create({
     baseURL,
     headers: {
-        'Content-Type': 'application/json'
-        //'ngrok-skip-browser-warning': 'true', // Adicionado para ignorar aviso do Ngrok
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true', // Adicionado para ignorar aviso do Ngrok
     },
 });
 
