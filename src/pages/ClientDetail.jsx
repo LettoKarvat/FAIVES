@@ -1,3 +1,4 @@
+// ClientDetail.jsx
 import React, { useState, useEffect } from 'react';
 import {
     Box,
@@ -21,10 +22,113 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import RemoveIcon from '@mui/icons-material/Remove';
 import api from '../services/api';
 import { useParams, useNavigate } from 'react-router-dom';
 
-/** Agrupa os registros por card_name. */
+// IMPORTA O SEU FANCYITEM
+import FancyItem from './FancyItem';
+
+/**
+ * Modal para criar/editar vários valores (array).
+ * O usuário adiciona quantos itens quiser.
+ * Ao salvar, chamamos onSave(valuesArray).
+ */
+function MultiValueModal({
+    open,
+    onClose,
+    onSave,
+    defaultValues = [],
+    mode = 'create',
+    initialCardName = '',
+    initialFieldName = '',
+    onChangeCardName,
+    onChangeFieldName
+}) {
+    const [values, setValues] = useState([]);
+
+    useEffect(() => {
+        if (open) {
+            if (defaultValues.length > 0) {
+                setValues([...defaultValues]);
+            } else {
+                setValues(['']);
+            }
+        }
+    }, [open, defaultValues]);
+
+    const handleAddValue = () => {
+        setValues((prev) => [...prev, '']);
+    };
+
+    const handleRemoveValue = (index) => {
+        if (values.length === 1) return;
+        setValues((prev) => prev.filter((_, i) => i !== index));
+    };
+
+    const handleChangeValue = (index, newVal) => {
+        const updated = [...values];
+        updated[index] = newVal;
+        setValues(updated);
+    };
+
+    const handleSave = () => {
+        onSave(values);
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+            <DialogTitle>{mode === 'edit' ? 'Editar Campo' : 'Novo Campo'}</DialogTitle>
+            <DialogContent sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {/* CardName */}
+                <TextField
+                    label="Card Name"
+                    fullWidth
+                    value={initialCardName}
+                    onChange={(e) => onChangeCardName(e.target.value)}
+                    helperText="Informe o nome do card"
+                />
+                {/* FieldName */}
+                <TextField
+                    label="Field Name"
+                    fullWidth
+                    value={initialFieldName}
+                    onChange={(e) => onChangeFieldName(e.target.value)}
+                />
+
+                {values.map((val, idx) => (
+                    <Box key={idx} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        <TextField
+                            label={`Valor #${idx + 1}`}
+                            value={val}
+                            onChange={(e) => handleChangeValue(idx, e.target.value)}
+                            fullWidth
+                        />
+                        <IconButton
+                            onClick={() => handleRemoveValue(idx)}
+                            disabled={values.length === 1}
+                        >
+                            <RemoveIcon />
+                        </IconButton>
+                        {idx === values.length - 1 && (
+                            <IconButton onClick={handleAddValue}>
+                                <AddIcon />
+                            </IconButton>
+                        )}
+                    </Box>
+                ))}
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Cancelar</Button>
+                <Button variant="contained" onClick={handleSave}>Salvar</Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
+/**
+ * Agrupa os registros (client_access) por 'card_name'.
+ */
 function groupByCardName(accessList) {
     const map = {};
     accessList.forEach((acc) => {
@@ -37,11 +141,44 @@ function groupByCardName(accessList) {
     return map;
 }
 
+/**
+ * Exibe o field_value de forma 'Fancy'.
+ * - Se for array => cada item vira <FancyItem />
+ * - Se for objeto => cada chave: valor => <FancyItem />
+ * - Se for string => um <FancyItem />
+ */
+function renderFieldValue(value) {
+    if (Array.isArray(value)) {
+        return (
+            <Box>
+                {value.map((str, idx) => (
+                    <FancyItem key={idx} text={str} />
+                ))}
+            </Box>
+        );
+    } else if (value && typeof value === 'object') {
+        // objeto => iterar cada chave: valor
+        const entries = Object.entries(value);
+        return (
+            <Box>
+                {entries.map(([k, v], i) => (
+                    <FancyItem key={i} text={`${k}: ${v}`} />
+                ))}
+            </Box>
+        );
+    } else {
+        // string ou null
+        const strValue = value || '';
+        return <FancyItem text={strValue} />;
+    }
+}
+
 export default function ClientDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    // Dados do cliente
+    // --------------- ESTADOS ---------------
+    // Cliente
     const [client, setClient] = useState(null);
     const [loadingClient, setLoadingClient] = useState(true);
     const [errorClient, setErrorClient] = useState('');
@@ -51,25 +188,26 @@ export default function ClientDetail() {
     const [loadingAccesses, setLoadingAccesses] = useState(true);
     const [errorAccesses, setErrorAccesses] = useState('');
 
-    // -------------- Modal: Novo Card --------------
+    // Modal: Novo Card
     const [openNewCardModal, setOpenNewCardModal] = useState(false);
     const [newCardName, setNewCardName] = useState('');
     const [newFieldName, setNewFieldName] = useState('');
     const [newFieldValue, setNewFieldValue] = useState('');
 
-    // -------------- Modal: Novo/Editar Campo --------------
-    const [openFieldModal, setOpenFieldModal] = useState(false);
-    const [editingAccess, setEditingAccess] = useState(null); // se for null => criando
-    const [cardNameForField, setCardNameForField] = useState(''); // card a que esse campo pertence
-    const [fieldName, setFieldName] = useState('');
-    const [fieldValue, setFieldValue] = useState('');
+    // MultiValueModal
+    const [openMultiModal, setOpenMultiModal] = useState(false);
+    const [multiMode, setMultiMode] = useState('create'); // ou 'edit'
+    const [multiCardName, setMultiCardName] = useState('');
+    const [multiFieldName, setMultiFieldName] = useState('');
+    const [multiDefaultValues, setMultiDefaultValues] = useState([]);
+    const [multiAccessId, setMultiAccessId] = useState(null);
 
-    // -------------- Modal: Renomear Card --------------
+    // Renomear Card
     const [openRenameModal, setOpenRenameModal] = useState(false);
     const [oldCardName, setOldCardName] = useState('');
     const [newCardNameForRename, setNewCardNameForRename] = useState('');
 
-    // -------------- Modal: Editar Cliente --------------
+    // Editar Cliente
     const [openEditClientModal, setOpenEditClientModal] = useState(false);
     const [editName, setEditName] = useState('');
     const [editCnpj, setEditCnpj] = useState('');
@@ -78,11 +216,12 @@ export default function ClientDetail() {
     const [editContactPhone, setEditContactPhone] = useState('');
     const [editOwnerName, setEditOwnerName] = useState('');
 
-    // ========================================================
-    // useEffect - carrega cliente e acessos
+    // ----------------------------------------
+    // Carregar cliente e acessos
     useEffect(() => {
         fetchClient();
         fetchAccesses();
+        // eslint-disable-next-line
     }, [id]);
 
     const fetchClient = async () => {
@@ -108,7 +247,19 @@ export default function ClientDetail() {
             const resp = await api.get(`/clients/${id}/accesses`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setAccesses(resp.data);
+            // Se field_value é string JSON, parse
+            const parsed = resp.data.map((item) => {
+                if (typeof item.field_value === 'string') {
+                    try {
+                        const val = JSON.parse(item.field_value);
+                        return { ...item, field_value: val };
+                    } catch {
+                        return item;
+                    }
+                }
+                return item;
+            });
+            setAccesses(parsed);
         } catch (err) {
             console.error(err);
             setErrorAccesses('Não foi possível carregar os acessos.');
@@ -117,8 +268,8 @@ export default function ClientDetail() {
         }
     };
 
-    // ========================================================
-    // 1) Novo Card (cria 1 card + 1º campo)
+    // ----------------------------------------
+    // Novo Card
     const handleOpenNewCardModal = () => {
         setNewCardName('');
         setNewFieldName('');
@@ -151,68 +302,62 @@ export default function ClientDetail() {
         }
     };
 
-    // ========================================================
-    // 2) Adicionar Campo (ou Editar Campo) no Card
-    //    - se "editingAccess" != null => PATCH, senão => POST
-    const handleOpenFieldModal = (card, access = null) => {
-        if (access) {
-            // Editando
-            setEditingAccess(access);
-            setCardNameForField(access.card_name || '');
-            setFieldName(access.field_name || '');
-            setFieldValue(access.field_value || '');
-        } else {
-            // Criando
-            setEditingAccess(null);
-            setCardNameForField(card); // se for "adicionar" a card existente
-            setFieldName('');
-            setFieldValue('');
-        }
-        setOpenFieldModal(true);
+    // ----------------------------------------
+    // Criar Campo (MultiValue)
+    const handleOpenCreateField = (cardName) => {
+        setMultiMode('create');
+        setMultiCardName(cardName);
+        setMultiFieldName('');
+        setMultiDefaultValues(['']);
+        setMultiAccessId(null);
+        setOpenMultiModal(true);
     };
 
-    const handleCloseFieldModal = () => setOpenFieldModal(false);
+    // Editar Campo (MultiValue)
+    const handleOpenEditField = (access) => {
+        setMultiMode('edit');
+        setMultiCardName(access.card_name || '');
+        setMultiFieldName(access.field_name || '');
+        setMultiAccessId(access.id);
 
-    const handleSaveField = async () => {
-        if (!cardNameForField || !fieldName) {
-            alert('Card e Nome do Campo são obrigatórios.');
-            return;
+        if (Array.isArray(access.field_value)) {
+            setMultiDefaultValues([...access.field_value]);
+        } else if (typeof access.field_value === 'string') {
+            setMultiDefaultValues([access.field_value]);
+        } else {
+            setMultiDefaultValues(['']);
         }
+        setOpenMultiModal(true);
+    };
+
+    const handleSaveMultiValues = async (valuesArray) => {
         try {
             const token = localStorage.getItem('token');
-            if (editingAccess) {
-                // PATCH
-                await api.patch(
-                    `/clients/${id}/accesses/${editingAccess.id}`,
-                    {
-                        card_name: cardNameForField,
-                        field_name: fieldName,
-                        field_value: fieldValue
-                    },
-                    { headers: { Authorization: `Bearer ${token}` } }
-                );
+            const body = {
+                card_name: multiCardName,
+                field_name: multiFieldName,
+                field_value: valuesArray
+            };
+
+            if (multiMode === 'create') {
+                await api.post(`/clients/${id}/accesses`, body, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
             } else {
-                // POST
-                await api.post(
-                    `/clients/${id}/accesses`,
-                    {
-                        card_name: cardNameForField,
-                        field_name: fieldName,
-                        field_value: fieldValue
-                    },
-                    { headers: { Authorization: `Bearer ${token}` } }
-                );
+                await api.patch(`/clients/${id}/accesses/${multiAccessId}`, body, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
             }
-            setOpenFieldModal(false);
+            setOpenMultiModal(false);
             fetchAccesses();
-        } catch (err) {
-            console.error(err);
-            alert('Erro ao salvar campo.');
+        } catch (error) {
+            console.error(error);
+            alert('Erro ao salvar múltiplos valores');
         }
     };
 
-    // ========================================================
-    // 3) Renomear Card
+    // ----------------------------------------
+    // Renomear Card
     const handleOpenRenameModal = (oldName) => {
         setOldCardName(oldName);
         setNewCardNameForRename('');
@@ -243,8 +388,8 @@ export default function ClientDetail() {
         }
     };
 
-    // ========================================================
-    // 4) Excluir Card (DELETE /cards/delete)
+    // ----------------------------------------
+    // Excluir Card
     const handleDeleteCard = async (cardName) => {
         if (!window.confirm(`Deseja excluir o card '${cardName}' e todos os campos?`)) return;
         try {
@@ -260,8 +405,8 @@ export default function ClientDetail() {
         }
     };
 
-    // ========================================================
-    // 5) Excluir Campo individual
+    // ----------------------------------------
+    // Excluir Campo
     const handleDeleteField = async (accessId) => {
         if (!window.confirm('Deseja excluir este campo?')) return;
         try {
@@ -276,10 +421,10 @@ export default function ClientDetail() {
         }
     };
 
-    // ========================================================
-    // 6) Editar Cliente
+    // ----------------------------------------
+    // Editar Cliente
     const handleOpenEditClientModal = () => {
-        // Preenche os campos com os dados atuais do cliente
+        if (!client) return;
         setEditName(client.name);
         setEditCnpj(client.cnpj || '');
         setEditSegment(client.segment || '');
@@ -288,7 +433,6 @@ export default function ClientDetail() {
         setEditOwnerName(client.ownerName || '');
         setOpenEditClientModal(true);
     };
-
     const handleCloseEditClientModal = () => setOpenEditClientModal(false);
 
     const handleSaveClientEdit = async () => {
@@ -315,8 +459,8 @@ export default function ClientDetail() {
         }
     };
 
-    // ========================================================
-    // 7) Excluir Cliente
+    // ----------------------------------------
+    // Excluir Cliente
     const handleDeleteClient = async () => {
         if (!window.confirm('Deseja excluir este cliente?')) return;
         try {
@@ -325,14 +469,14 @@ export default function ClientDetail() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             alert('Cliente excluído com sucesso.');
-            navigate('/clients'); // Redireciona para a lista de clientes
+            navigate('/clients');
         } catch (err) {
             console.error(err);
             alert('Erro ao excluir cliente.');
         }
     };
 
-    // ========================================================
+    // ----------------------------------------
     // RENDER
     if (loadingClient) {
         return (
@@ -368,7 +512,6 @@ export default function ClientDetail() {
                 CNPJ: {client.cnpj}
             </Typography>
 
-            {/* Botões para editar e excluir o cliente */}
             <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                 <Button variant="outlined" onClick={handleOpenEditClientModal}>
                     Editar Cliente
@@ -378,7 +521,6 @@ export default function ClientDetail() {
                 </Button>
             </Box>
 
-            {/* Botão: Novo Card */}
             <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -470,7 +612,7 @@ export default function ClientDetail() {
                                                         borderColor: '#444'
                                                     }}
                                                 >
-                                                    {acc.field_value}
+                                                    {renderFieldValue(acc.field_value)}
                                                 </TableCell>
                                                 <TableCell
                                                     sx={{
@@ -481,7 +623,7 @@ export default function ClientDetail() {
                                                 >
                                                     <IconButton
                                                         color="primary"
-                                                        onClick={() => handleOpenFieldModal(acc.card_name, acc)}
+                                                        onClick={() => handleOpenEditField(acc)}
                                                         sx={{ mr: 1 }}
                                                     >
                                                         <EditIcon />
@@ -495,12 +637,19 @@ export default function ClientDetail() {
                                                 </TableCell>
                                             </TableRow>
                                         ))}
-                                        <TableRow>
+                                        <TableRow
+                                            sx={{
+                                                borderBottom: '2px solid #555',
+                                                '& > td': {
+                                                    borderBottom: '0 !important' // remove a linha fina das cells
+                                                }
+                                            }}>
+
                                             <TableCell colSpan={3} align="right" sx={{ borderColor: '#444' }}>
                                                 <Button
                                                     variant="outlined"
                                                     startIcon={<AddIcon />}
-                                                    onClick={() => handleOpenFieldModal(cardName)}
+                                                    onClick={() => handleOpenCreateField(cardName)}
                                                     sx={{ color: '#64b5f6', borderColor: '#64b5f6' }}
                                                 >
                                                     Adicionar Campo
@@ -544,6 +693,7 @@ export default function ClientDetail() {
                         fullWidth
                         value={newFieldValue}
                         onChange={(e) => setNewFieldValue(e.target.value)}
+                        helperText="Pode ser texto simples. Para vários valores, use Adicionar Campo depois."
                     />
                 </DialogContent>
                 <DialogActions>
@@ -554,50 +704,23 @@ export default function ClientDetail() {
                 </DialogActions>
             </Dialog>
 
-            {/* MODAL: Novo/Editar Campo */}
-            <Dialog
-                open={openFieldModal}
-                onClose={() => setOpenFieldModal(false)}
-                fullWidth
-                maxWidth="sm"
-            >
-                <DialogTitle>{editingAccess ? 'Editar Campo' : 'Novo Campo'}</DialogTitle>
-                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                    <TextField
-                        label="Card"
-                        variant="outlined"
-                        fullWidth
-                        value={cardNameForField}
-                        onChange={(e) => setCardNameForField(e.target.value)}
-                        helperText="Informe o nome do card ao qual este campo pertence"
-                    />
-                    <TextField
-                        label="Nome do Campo"
-                        variant="outlined"
-                        fullWidth
-                        value={fieldName}
-                        onChange={(e) => setFieldName(e.target.value)}
-                    />
-                    <TextField
-                        label="Valor"
-                        variant="outlined"
-                        fullWidth
-                        value={fieldValue}
-                        onChange={(e) => setFieldValue(e.target.value)}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setOpenFieldModal(false)}>Cancelar</Button>
-                    <Button variant="contained" onClick={handleSaveField}>
-                        Salvar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            {/* MODAL: MultiValueModal */}
+            <MultiValueModal
+                open={openMultiModal}
+                onClose={() => setOpenMultiModal(false)}
+                onSave={handleSaveMultiValues}
+                defaultValues={multiDefaultValues}
+                mode={multiMode}
+                initialCardName={multiCardName}
+                initialFieldName={multiFieldName}
+                onChangeCardName={setMultiCardName}
+                onChangeFieldName={setMultiFieldName}
+            />
 
             {/* MODAL: Renomear Card */}
             <Dialog
                 open={openRenameModal}
-                onClose={() => setOpenRenameModal(false)}
+                onClose={handleCloseRenameModal}
                 fullWidth
                 maxWidth="sm"
             >
