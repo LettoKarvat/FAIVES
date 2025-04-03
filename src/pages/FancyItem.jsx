@@ -3,10 +3,14 @@ import React from 'react';
 import { Box, Typography } from '@mui/material';
 
 export default function FancyItem({ text }) {
-    if (text.includes(':')) {
-        const [labelRaw, valueRaw] = text.split(':');
-        const label = labelRaw.trim();
-        const value = valueRaw.trim();
+    // localiza o primeiro ':'
+    const indexOfColon = text.indexOf(':');
+
+    if (indexOfColon !== -1) {
+        // "label" é tudo antes dos dois-pontos
+        const label = text.substring(0, indexOfColon).trim();
+        // "value" é tudo depois (incluindo quaisquer outros ':' lá no meio)
+        const value = text.substring(indexOfColon + 1).trim();
 
         return (
             <Box
@@ -30,6 +34,7 @@ export default function FancyItem({ text }) {
             </Box>
         );
     } else {
+        // se não tem ":", volta a lógica de texto puro
         return (
             <Box
                 sx={{
