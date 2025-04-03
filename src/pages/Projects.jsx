@@ -17,6 +17,7 @@ import {
   TextField,
   MenuItem,
   IconButton,
+  Pagination, // IMPORTANTE: para paginação
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
@@ -32,7 +33,7 @@ export default function Projects() {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [errorProjects, setErrorProjects] = useState('');
 
-  // Armazena informações do usuário atual
+  // Usuário logado
   const [currentUser, setCurrentUser] = useState(null);
 
   // Modal de criação de projeto
@@ -52,7 +53,15 @@ export default function Projects() {
   const [openAssociateDialog, setOpenAssociateDialog] = useState(false);
   const [selectedAssociateUser, setSelectedAssociateUser] = useState('');
 
-  // Hook de navegação
+  // ---- Filtros e Ordenação ----
+  const [searchTerm, setSearchTerm] = useState('');     // Filtro por nome
+  const [statusFilter, setStatusFilter] = useState(''); // Filtro por status
+  const [sortBy, setSortBy] = useState('');             // Ordenação (por deadline, etc.)
+
+  // ---- Paginação ----
+  const [page, setPage] = useState(1);
+  const rowsPerPage = 6;
+
   const navigate = useNavigate();
 
   // 1. Carrega o usuário do localStorage ao montar o componente
@@ -78,7 +87,8 @@ export default function Projects() {
     fetchUsers();
   }, []);
 
-  // Busca projetos
+  // =======================
+  // Buscar projetos
   const fetchProjects = async () => {
     try {
       setLoadingProjects(true);
@@ -90,7 +100,7 @@ export default function Projects() {
         },
       });
 
-      // Se prazo passou e não está concluído, marcar como "Em Atraso" no front
+      // Se o prazo passou e o status não for "Concluído", marcamos como "Em Atraso"
       let fetchedProjects = response.data;
       let updatedProjects = fetchedProjects.map((proj) => {
         if (
@@ -123,7 +133,7 @@ export default function Projects() {
     }
   };
 
-  // Busca clientes
+  // Buscar clientes
   const fetchClients = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -138,7 +148,7 @@ export default function Projects() {
     }
   };
 
-  // Busca usuários
+  // Buscar usuários
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -153,7 +163,46 @@ export default function Projects() {
     }
   };
 
-  // Abre modal de criar projeto
+  // =======================
+  // Função que filtra e ordena os projetos
+  const getFilteredProjects = () => {
+    let filtered = [...projects];
+
+    // Filtro por nome
+    if (searchTerm.trim()) {
+      filtered = filtered.filter((p) =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Filtro por status
+    if (statusFilter) {
+      filtered = filtered.filter((p) => p.status === statusFilter);
+    }
+
+    // Ordenação
+    if (sortBy === 'deadline') {
+      filtered.sort((a, b) => {
+        if (!a.deadline) return 1;
+        if (!b.deadline) return -1;
+        return dayjs(a.deadline).diff(dayjs(b.deadline));
+      });
+    }
+
+    return filtered;
+  };
+
+  // Aplica filtro+ordenação
+  const allFilteredProjects = getFilteredProjects();
+
+  // PAGINAÇÃO local
+  const totalPages = Math.ceil(allFilteredProjects.length / rowsPerPage);
+  const startIndex = (page - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
+  const projectsOnPage = allFilteredProjects.slice(startIndex, endIndex);
+
+  // =======================
+  // Modal de criar projeto
   const handleOpenModal = () => {
     // Se for convidado, bloquear
     if (currentUser?.role === 'convidado') {
@@ -173,13 +222,9 @@ export default function Projects() {
     setModalError('');
     setOpenModal(true);
   };
-
-  // Fecha modal de criar projeto
   const handleCloseModal = () => {
     setOpenModal(false);
   };
-
-  // Atualiza campos do formulário
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setProjectForm((prev) => ({
@@ -187,8 +232,6 @@ export default function Projects() {
       [name]: value,
     }));
   };
-
-  // Atualiza o prazo (DatePicker)
   const handleDeadlineChange = (newDate) => {
     if (!newDate) {
       setProjectForm((prev) => ({ ...prev, deadline: '' }));
@@ -197,10 +240,7 @@ export default function Projects() {
       setProjectForm((prev) => ({ ...prev, deadline: formatted }));
     }
   };
-
-  // Cria o projeto
   const handleCreateProject = async () => {
-    // Verificação de role "convidado"
     if (!currentUser || currentUser.role === 'convidado') {
       alert('Você não tem permissão para criar projetos.');
       return;
@@ -231,6 +271,7 @@ export default function Projects() {
     }
   };
 
+  // =======================
   // Modal de adicionar responsável associado
   const handleOpenAssociateDialog = () => {
     setSelectedAssociateUser('');
@@ -259,11 +300,18 @@ export default function Projects() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+      {/* Título e botão de novo projeto */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: 2,
+        }}
+      >
         <Typography variant="h4" gutterBottom>
           Projetos
         </Typography>
-        {/* Só exibe o botão de Novo Projeto se não for convidado */}
         {currentUser && currentUser.role !== 'convidado' && (
           <Button variant="contained" onClick={handleOpenModal}>
             Novo Projeto
@@ -271,7 +319,51 @@ export default function Projects() {
         )}
       </Box>
 
-      {/* Se ainda carregando, exibe spinner; se erro, exibe alerta; caso contrário, lista projetos */}
+      {/* Barra de Filtros e Ordenação */}
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
+        <TextField
+          label="Buscar por nome"
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPage(1); // reset da paginação
+          }}
+          variant="outlined"
+        />
+
+        <TextField
+          select
+          label="Filtrar por Status"
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPage(1);
+          }}
+          sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="">Todos</MenuItem>
+          <MenuItem value="Pendente">Pendente</MenuItem>
+          <MenuItem value="Em Andamento">Em Andamento</MenuItem>
+          <MenuItem value="Em Atraso">Em Atraso</MenuItem>
+          <MenuItem value="Concluído">Concluído</MenuItem>
+        </TextField>
+
+        <TextField
+          select
+          label="Ordenar"
+          value={sortBy}
+          onChange={(e) => {
+            setSortBy(e.target.value);
+            setPage(1);
+          }}
+          sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="">Sem ordenação</MenuItem>
+          <MenuItem value="deadline">Pelo Prazo</MenuItem>
+        </TextField>
+      </Box>
+
+      {/* Se ainda carregando, exibe spinner; se erro, exibe alerta */}
       {loadingProjects ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <CircularProgress />
@@ -279,74 +371,89 @@ export default function Projects() {
       ) : errorProjects ? (
         <Alert severity="error">{errorProjects}</Alert>
       ) : (
-        <Grid container spacing={2}>
-          {projects.map((project) => {
-            // Combina responsável principal + responsáveis associados
-            const allResponsibles = [];
-            if (project.responsible) {
-              allResponsibles.push(project.responsible);
-            }
-            if (project.associated_users && project.associated_users.length > 0) {
-              allResponsibles.push(...project.associated_users);
-            }
+        <>
+          {/* Listagem de projetos (já filtrados) */}
+          <Grid container spacing={2}>
+            {projectsOnPage.map((project) => {
+              // Combina responsável principal + responsáveis associados
+              const allResponsibles = [];
+              if (project.responsible) {
+                allResponsibles.push(project.responsible);
+              }
+              if (project.associated_users && project.associated_users.length > 0) {
+                allResponsibles.push(...project.associated_users);
+              }
 
-            return (
-              <Grid item key={project.id} xs={12} sm={12} md={6} lg={4}>
-                <Card
-                  sx={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`/projects/${project.id}`)}
-                >
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      {project.name}
-                    </Typography>
-
-                    <Typography variant="body2" color="textSecondary">
-                      Cliente: {project.client ? project.client.name : 'Não atribuído'}
-                    </Typography>
-
-                    <Chip
-                      label={project.status}
-                      color={
-                        project.status === 'Em Atraso'
-                          ? 'error'
-                          : project.status === 'Em Andamento'
-                            ? 'primary'
-                            : project.status === 'Pendente'
-                              ? 'warning'
-                              : project.status === 'Concluído'
-                                ? 'success'
-                                : 'default'
-                      }
-                      variant="outlined"
-                      sx={{ my: 1 }}
-                    />
-
-                    <Typography variant="body2">
-                      Prazo: {project.deadline || 'N/A'}
-                    </Typography>
-
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      Progresso:
-                    </Typography>
-                    <LinearProgress
-                      variant="determinate"
-                      value={project.progress}
-                      sx={{ height: 8, borderRadius: 2, mt: 0.5 }}
-                    />
-                    <Typography variant="caption">{project.progress}%</Typography>
-
-                    {allResponsibles.length > 0 && (
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        Responsáveis: {allResponsibles.map((u) => u.name).join(', ')}
+              return (
+                <Grid item key={project.id} xs={12} sm={12} md={6} lg={4}>
+                  <Card
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/projects/${project.id}`)}
+                  >
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        {project.name}
                       </Typography>
-                    )}
-                  </CardContent>
-                </Card>
-              </Grid>
-            );
-          })}
-        </Grid>
+
+                      <Typography variant="body2" color="textSecondary">
+                        Cliente: {project.client ? project.client.name : 'Não atribuído'}
+                      </Typography>
+
+                      <Chip
+                        label={project.status}
+                        color={
+                          project.status === 'Em Atraso'
+                            ? 'error'
+                            : project.status === 'Em Andamento'
+                              ? 'primary'
+                              : project.status === 'Pendente'
+                                ? 'warning'
+                                : project.status === 'Concluído'
+                                  ? 'success'
+                                  : 'default'
+                        }
+                        variant="outlined"
+                        sx={{ my: 1 }}
+                      />
+
+                      <Typography variant="body2">
+                        Prazo: {project.deadline || 'N/A'}
+                      </Typography>
+
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        Progresso:
+                      </Typography>
+                      <LinearProgress
+                        variant="determinate"
+                        value={project.progress}
+                        sx={{ height: 8, borderRadius: 2, mt: 0.5 }}
+                      />
+                      <Typography variant="caption">{project.progress}%</Typography>
+
+                      {allResponsibles.length > 0 && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          Responsáveis: {allResponsibles.map((u) => u.name).join(', ')}
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+              );
+            })}
+          </Grid>
+
+          {/* Paginação */}
+          {totalPages > 1 && (
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+              <Pagination
+                count={totalPages}
+                page={page}
+                onChange={(e, value) => setPage(value)}
+                color="primary"
+              />
+            </Box>
+          )}
+        </>
       )}
 
       {/* Modal: Criar Projeto */}
